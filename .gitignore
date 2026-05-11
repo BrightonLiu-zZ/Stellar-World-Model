@@ -1,0 +1,10 @@
+data/
+processed/
+labels/
+.claude/
+CLAUDE.md
+docs/
+.claudeignore
+__pycache__/
+session-notes/
+*.log

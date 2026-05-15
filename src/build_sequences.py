@@ -5,7 +5,7 @@ For each TIC ID in processed/df_final.csv:
   2. Mask QUALITY != 0 cadences to NaN
   3. Split each sector into segments at NaN runs >= gap_threshold cadences
   4. NaN-aware MAD-normalize each segment (NO interpolation at any stage)
-  5. Slide T=1024 / stride=512 windows starting at index 0 of each segment
+  5. Slide T=1024 / stride=1024 windows starting at index 0 of each segment
   6. Classify each candidate window:
        Class A — zero NaN          (KEPT)
        Class B — has NaN, all NaN runs <= 10 cadences  (discarded, counted)
@@ -20,7 +20,7 @@ Usage examples:
     python build_sequences.py
     python build_sequences.py --resume
     python build_sequences.py --limit 5            # quick smoke test on 5 stars
-    python build_sequences.py --seq-len 8 --window-size 1024 --stride 512
+    python build_sequences.py --seq-len 4 --window-size 1024 --stride 1024
 """
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ import socket
 import sys
 import time
 import traceback
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, TypeVar
@@ -62,9 +63,12 @@ _TRANSIENT_EXCEPTIONS: tuple = (
     TimeoutError,
 )
 
-# Wait (seconds) before retries 2, 3, 4, 5 → 5 attempts total per network call.
-_BACKOFF_SCHEDULE: tuple = (5, 15, 45, 120)
+# Wait (seconds) before retries 2, 3, 4, 5, 6 → 6 attempts total per network call.
+#_BACKOFF_SCHEDULE: tuple = (5, 15, 45, 120, 300)
+_BACKOFF_SCHEDULE: tuple = (5, 15, 45)
 
+class _CorruptCacheRetry(ConnectionError):
+    """Raised after deleting a corrupt cached FITS file; skips backoff sleep."""
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -83,11 +87,11 @@ def parse_args() -> argparse.Namespace:
                     help="Per-star checkpoint")
     ap.add_argument("--log-file", default="build_sequences.log",
                     help="Log file path")
-    ap.add_argument("--seq-len", type=int, default=8,
+    ap.add_argument("--seq-len", type=int, default=4,
                     help="Min Class-A windows for a segment to be saved")
     ap.add_argument("--window-size", type=int, default=1024, help="Window length T")
-    ap.add_argument("--stride", type=int, default=512, help="Stride between windows")
-    ap.add_argument("--gap-threshold", type=int, default=100,
+    ap.add_argument("--stride", type=int, default=1024, help="Stride between windows")
+    ap.add_argument("--gap-threshold", type=int, default=1,
                     help="Min consecutive NaNs that define a segment break")
     ap.add_argument("--checkpoint-every", type=int, default=50,
                     help="Flush progress CSV every N stars")
@@ -98,6 +102,11 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max-consecutive-errors", type=int, default=5,
                     help="Abort the run after this many consecutive errored stars "
                          "(likely outage). 0 disables the safety valve.")
+    ap.add_argument("--workers", type=int, default=4,
+                    help="Number of parallel download threads")
+    ap.add_argument("--clear-cache", action="store_true",
+                    help="Delete the lightkurve TESS FITS cache before starting "
+                         "(removes corrupt files left by interrupted runs)")
     return ap.parse_args()
 
 
@@ -115,6 +124,11 @@ def setup_logging(log_file: Path) -> logging.Logger:
     fh = logging.FileHandler(log_file, mode="a", encoding="utf-8")
     fh.setFormatter(fmt)
     logger.addHandler(fh)
+    # Force line-buffered stdout so progress prints immediately under conda run.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(fmt)
     logger.addHandler(sh)
@@ -269,7 +283,7 @@ def _make_download_fn(sr, logger: logging.Logger, tic_id: int) -> Callable[[], o
                             f"TIC {tic_id}: deleted corrupt cache file "
                             f"'{corrupt.name}'; download will be retried"
                         )
-                raise ConnectionError(f"corrupt cache deleted, retrying: {e}") from e
+                raise _CorruptCacheRetry(f"corrupt cache deleted, retrying: {e}") from e
             raise  # non-corrupt LightkurveError propagates immediately
     return _download
 
@@ -299,12 +313,13 @@ def _call_with_retry(
             last_exc = e
             if attempt >= max_attempts:
                 break
-            wait = _BACKOFF_SCHEDULE[attempt - 1]
+            wait = 0 if isinstance(e, _CorruptCacheRetry) else _BACKOFF_SCHEDULE[attempt - 1]
             logger.warning(
                 f"TIC {tic_id}: {label} transient {type(e).__name__}: {e} "
                 f"(attempt {attempt}/{max_attempts}); retrying in {wait}s"
             )
-            time.sleep(wait)
+            if wait:
+                time.sleep(wait)
     assert last_exc is not None
     raise last_exc
 
@@ -313,6 +328,22 @@ def _call_with_retry(
 # Per-star processing
 # ---------------------------------------------------------------------------
 
+@dataclass
+class StarResult:
+    tic_id: int
+    status: str  # 'done' | 'no_data' | 'error'
+    n_segments_saved: int
+    error_msg: str
+    # per-star stat deltas — accumulated in main thread to avoid locks
+    d_sectors: int = 0
+    d_segs_total: int = 0
+    d_segs_saved: int = 0
+    d_segs_short: int = 0
+    d_win_a: int = 0
+    d_win_b: int = 0
+    d_win_c: int = 0
+
+
 def process_star(
     tic_id: int,
     out_dir: Path,
@@ -320,14 +351,14 @@ def process_star(
     window_size: int,
     stride: int,
     gap_threshold: int,
-    stats: Stats,
     logger: logging.Logger,
-) -> tuple[str, int, str]:
+) -> StarResult:
     """Download, process, and save sequences for one TIC.
 
-    Returns (status, n_segments_saved_this_star, error_msg).
-    status in {'done', 'no_data', 'error'}.
+    Returns a StarResult; all stat deltas are carried in the result so
+    the caller can apply them without any shared-state locking.
     """
+    res = StarResult(tic_id=tic_id, status="error", n_segments_saved=0, error_msg="")
     try:
         sr = _call_with_retry(
             lambda: lk.search_lightcurve(
@@ -339,11 +370,13 @@ def process_star(
         )
     except Exception as e:
         logger.error(f"TIC {tic_id}: search failed: {type(e).__name__}: {e}")
-        return ("error", 0, _one_line(f"search: {type(e).__name__}: {e}"))
+        res.error_msg = _one_line(f"search: {type(e).__name__}: {e}")
+        return res
 
     if len(sr) == 0:
         logger.info(f"TIC {tic_id}: no SPOC 2-min data")
-        return ("no_data", 0, "")
+        res.status = "no_data"
+        return res
 
     try:
         lcs = _call_with_retry(
@@ -354,13 +387,14 @@ def process_star(
         )
     except Exception as e:
         logger.error(f"TIC {tic_id}: download_all failed: {type(e).__name__}: {e}")
-        return ("error", 0, _one_line(f"download: {type(e).__name__}: {e}"))
+        res.error_msg = _one_line(f"download: {type(e).__name__}: {e}")
+        return res
 
     if lcs is None or len(lcs) == 0:
         logger.info(f"TIC {tic_id}: download returned empty collection")
-        return ("no_data", 0, "")
+        res.status = "no_data"
+        return res
 
-    n_segments_saved = 0
     seen_sectors: set[int] = set()
 
     for lc in lcs:
@@ -372,7 +406,7 @@ def process_star(
         if sector in seen_sectors:
             continue  # MAST occasionally returns duplicate (sector, pipeline) pairs
         seen_sectors.add(sector)
-        stats.sectors_examined += 1
+        res.d_sectors += 1
 
         flux_col = _get_column(lc, "PDCSAP_FLUX", "pdcsap_flux")
         if flux_col is None:
@@ -387,39 +421,68 @@ def process_star(
         else:
             logger.warning(f"TIC {tic_id} sector {sector}: QUALITY column absent — proceeding without quality mask")
 
-        for seg_idx, (s, e) in enumerate(find_segments(flux, gap_threshold)):
-            stats.segments_total += 1
-            seg = mad_normalize(flux[s:e].copy())
+        time_arr = np.asarray(lc.time.value, dtype=np.float32)  # TBJD, parallel to flux
 
-            class_a: list[np.ndarray] = []
-            for w in slide_windows(seg, window_size, stride):
+        for seg_idx, (s, e) in enumerate(find_segments(flux, gap_threshold)):
+            res.d_segs_total += 1
+            seg = mad_normalize(flux[s:e].copy())
+            seg_time = time_arr[s:e]
+
+            # --- collect contiguous Class-A runs within this segment ---
+            current_run: list[np.ndarray] = []
+            current_run_times: list[np.ndarray] = []
+            runs: list[list[np.ndarray]] = []
+            runs_times: list[list[np.ndarray]] = []
+
+            for w, t in zip(slide_windows(seg, window_size, stride),
+                            slide_windows(seg_time, window_size, stride)):
                 klass = classify_window(w)
                 if klass == "A":
-                    stats.windows_class_a += 1
-                    class_a.append(w.copy())
-                elif klass == "B":
-                    stats.windows_class_b += 1
+                    res.d_win_a += 1
+                    current_run.append(w.copy())
+                    current_run_times.append(t.copy())
                 else:
-                    stats.windows_class_c += 1
+                    if klass == "B":
+                        res.d_win_b += 1
+                    else:
+                        res.d_win_c += 1
+                    if current_run:           # non-A breaks the run; bank it and reset
+                        runs.append(current_run)
+                        runs_times.append(current_run_times)
+                        current_run = []
+                        current_run_times = []
 
-            if len(class_a) >= seq_len:
-                arr = np.stack(class_a, axis=0).astype(np.float32)
-                arr = arr.reshape(arr.shape[0], window_size, 1)
-                out_path = out_dir / f"TIC{tic_id:010d}_s{sector:02d}_seg{seg_idx:02d}.npz"
-                np.savez(
-                    out_path,
-                    windows=arr,
-                    tic_id=np.int64(tic_id),
-                    sector=np.int64(sector),
-                    seg_idx=np.int64(seg_idx),
-                    n_windows=np.int64(arr.shape[0]),
-                )
-                stats.segments_saved += 1
-                n_segments_saved += 1
-            else:
-                stats.segments_too_short += 1
+            if current_run:                   # flush the final run
+                runs.append(current_run)
+                runs_times.append(current_run_times)
 
-    return ("done", n_segments_saved, "")
+            # save each contiguous run that meets the minimum length
+            for run_idx, (run, run_times) in enumerate(zip(runs, runs_times)):
+                if len(run) >= seq_len:
+                    arr = np.stack(run, axis=0).astype(np.float32)
+                    arr = arr.reshape(arr.shape[0], window_size, 1)
+                    times_arr = np.stack(run_times, axis=0).astype(np.float32)  # [N, 1024]
+                    out_path = out_dir / (
+                        f"TIC{tic_id:010d}_s{sector:02d}"
+                        f"_seg{seg_idx:02d}_run{run_idx:02d}.npz"
+                    )
+                    np.savez(
+                        out_path,
+                        windows=arr,
+                        times=times_arr,
+                        tic_id=np.int64(tic_id),
+                        sector=np.int64(sector),
+                        seg_idx=np.int64(seg_idx),
+                        run_idx=np.int64(run_idx),
+                        n_windows=np.int64(arr.shape[0]),
+                    )
+                    res.d_segs_saved += 1
+                    res.n_segments_saved += 1
+                else:
+                    res.d_segs_short += 1
+
+    res.status = "done"
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +540,36 @@ def _sigint_handler(signum, frame):
     _INTERRUPTED = True
 
 
+_WORKER_LOGGER: logging.Logger | None = None
+
+
+def _worker_init(log_file_str: str) -> None:
+    """Initializer for each child process.
+
+    1. Ignore SIGINT in workers so Ctrl+C is handled only by the parent.
+    2. Create a per-process logger that appends to the same log file. Each
+       worker has its own lightkurve/astroquery/astropy module state, which
+       is what avoids the thread-safety crashes seen with ThreadPoolExecutor.
+    """
+    import signal as _sig
+    _sig.signal(_sig.SIGINT, _sig.SIG_IGN)
+    global _WORKER_LOGGER
+    _WORKER_LOGGER = setup_logging(Path(log_file_str))
+
+
+def _worker_process_star(
+    tic_id: int,
+    out_dir: Path,
+    seq_len: int,
+    window_size: int,
+    stride: int,
+    gap_threshold: int,
+) -> "StarResult":
+    """Worker entry point — picklable; uses the per-process logger from _worker_init."""
+    assert _WORKER_LOGGER is not None, "worker not initialized"
+    return process_star(tic_id, out_dir, seq_len, window_size, stride, gap_threshold, _WORKER_LOGGER)
+
+
 def directory_size_gb(path: Path) -> float:
     if not path.exists():
         return 0.0
@@ -501,10 +594,19 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = setup_logging(log_file)
 
+    if args.clear_cache:
+        import shutil
+        tess_cache = Path.home() / ".lightkurve" / "cache" / "mastDownload" / "TESS"
+        if tess_cache.exists():
+            shutil.rmtree(tess_cache)
+            logger.info(f"--clear-cache: deleted {tess_cache}")
+        else:
+            logger.info(f"--clear-cache: cache directory not found, nothing to delete")
+
     if not input_csv.exists():
         logger.error(f"Input CSV not found: {input_csv}")
         logger.error("Run the export cell at the bottom of "
-                     "src/notebooks/charaterize_data copy.ipynb to produce it.")
+                     "src/notebooks/characterize_data_v2.ipynb to produce it.")
         return 1
 
     df_in = pd.read_csv(input_csv)
@@ -541,81 +643,132 @@ def main() -> int:
     logger.info(
         f"Starting build_sequences: {len(tic_ids)} stars to process, "
         f"window_size={args.window_size}, stride={args.stride}, "
-        f"gap_threshold={args.gap_threshold}, seq_len={args.seq_len}"
+        f"gap_threshold={args.gap_threshold}, seq_len={args.seq_len}, "
+        f"workers={args.workers}"
     )
     t0 = time.time()
     consecutive_errors = 0
     aborted_for_outage = False
+    completed = 0  # futures resolved so far
 
-    for i, tic_id in enumerate(tic_ids, start=1):
-        if _INTERRUPTED:
-            logger.warning("Ctrl+C received — flushing progress and exiting cleanly.")
-            break
-
-        try:
-            status, n_saved, err = process_star(
-                tic_id=tic_id,
-                out_dir=out_dir,
-                seq_len=args.seq_len,
-                window_size=args.window_size,
-                stride=args.stride,
-                gap_threshold=args.gap_threshold,
-                stats=stats,
-                logger=logger,
-            )
-        except KeyboardInterrupt:
-            _sigint_handler(None, None)
-            break
-        except Exception as e:
-            tb = traceback.format_exc()
-            logger.error(f"TIC {tic_id}: unhandled exception:\n{tb}")
-            status, n_saved, err = ("error", 0, _one_line(f"{type(e).__name__}: {e}"))
-
-        if status == "done":
+    def _apply_result(res: StarResult) -> None:
+        """Merge a StarResult into shared state. Called only from the main thread."""
+        nonlocal consecutive_errors, completed
+        completed += 1
+        stats.sectors_examined  += res.d_sectors
+        stats.segments_total    += res.d_segs_total
+        stats.segments_saved    += res.d_segs_saved
+        stats.segments_too_short += res.d_segs_short
+        stats.windows_class_a   += res.d_win_a
+        stats.windows_class_b   += res.d_win_b
+        stats.windows_class_c   += res.d_win_c
+        if res.status == "done":
             stats.stars_processed += 1
             consecutive_errors = 0
-        elif status == "no_data":
+        elif res.status == "no_data":
             stats.stars_no_data += 1
             consecutive_errors = 0
         else:
             stats.stars_error += 1
             consecutive_errors += 1
-
-        rec = {"tic_id": int(tic_id), "status": status,
-               "n_segments_saved": int(n_saved), "error_msg": err}
-        if int(tic_id) in progress_index:
-            progress_records[progress_index[int(tic_id)]] = rec
+        rec = {"tic_id": res.tic_id, "status": res.status,
+               "n_segments_saved": res.n_segments_saved, "error_msg": res.error_msg}
+        if res.tic_id in progress_index:
+            progress_records[progress_index[res.tic_id]] = rec
         else:
-            progress_index[int(tic_id)] = len(progress_records)
+            progress_index[res.tic_id] = len(progress_records)
             progress_records.append(rec)
 
-        if (
-            args.max_consecutive_errors > 0
-            and consecutive_errors >= args.max_consecutive_errors
-        ):
-            logger.error(
-                f"Aborting: {consecutive_errors} consecutive errored stars "
-                f"(>= --max-consecutive-errors={args.max_consecutive_errors}). "
-                f"Likely a network outage — flushing progress and exiting so "
-                f"--resume can pick up later without burning through the queue."
-            )
-            aborted_for_outage = True
-            break
+    def _drain_one(f: "Future[StarResult]", tid: int) -> None:
+        """Unwrap a finished future, apply its result, and checkpoint/log on cadence.
 
-        if i % args.checkpoint_every == 0 or i == len(tic_ids):
+        Called from BOTH the submission-loop inner drain AND the final as_completed drain
+        so that checkpoint flushes happen for every completed star, not just those that
+        complete while new work is still being submitted.
+        """
+        try:
+            res = f.result()
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error(f"TIC {tid}: unhandled exception:\n{tb}")
+            res = StarResult(tic_id=tid, status="error", n_segments_saved=0,
+                             error_msg=_one_line(f"{type(e).__name__}: {e}"))
+        _apply_result(res)
+        if completed % args.checkpoint_every == 0:
             save_progress(pd.DataFrame(progress_records, columns=PROGRESS_COLS), progress_csv)
             elapsed = time.time() - t0
-            rate = i / elapsed if elapsed > 0 else 0.0
-            remaining = len(tic_ids) - i
+            rate = completed / elapsed if elapsed > 0 else 0.0
+            remaining = len(tic_ids) - completed
             eta_min = remaining / rate / 60 if rate > 0 else float("inf")
             logger.info(
-                f"Progress {i}/{len(tic_ids)}  "
+                f"Progress {completed}/{len(tic_ids)}  "
                 f"done={stats.stars_processed} no_data={stats.stars_no_data} "
                 f"err={stats.stars_error}  "
                 f"segs_saved={stats.segments_saved}  "
                 f"rate={rate:.2f} stars/s  ETA={eta_min:.1f} min"
             )
 
+    with ProcessPoolExecutor(
+        max_workers=args.workers,
+        initializer=_worker_init,
+        initargs=(str(log_file.resolve()),),
+    ) as executor:
+        future_to_tic: dict[Future[StarResult], int] = {}
+
+        for tic_id in tic_ids:
+            if _INTERRUPTED:
+                break
+            if aborted_for_outage:
+                break
+            fut = executor.submit(
+                _worker_process_star,
+                tic_id,
+                out_dir,
+                args.seq_len,
+                args.window_size,
+                args.stride,
+                args.gap_threshold,
+            )
+            future_to_tic[fut] = tic_id
+
+            # Drain completed futures whenever the pool is full, to keep
+            # consecutive_errors and checkpoints up to date without blocking.
+            if len(future_to_tic) >= args.workers:
+                done_futs = [f for f in list(future_to_tic) if f.done()]
+                for f in done_futs:
+                    tid = future_to_tic.pop(f)
+                    _drain_one(f, tid)
+
+                    if (args.max_consecutive_errors > 0
+                            and consecutive_errors >= args.max_consecutive_errors):
+                        logger.error(
+                            f"Aborting: {consecutive_errors} consecutive errored stars "
+                            f"(>= --max-consecutive-errors={args.max_consecutive_errors}). "
+                            f"Likely a network outage — flushing progress and exiting so "
+                            f"--resume can pick up later without burning through the queue."
+                        )
+                        aborted_for_outage = True
+                        break
+
+        if _INTERRUPTED or aborted_for_outage:
+            logger.warning("Cancelling queued stars; waiting for in-flight workers to finish.")
+            cancelled = 0
+            for f in list(future_to_tic.keys()):
+                if f.cancel():
+                    future_to_tic.pop(f, None)
+                    cancelled += 1
+            if cancelled:
+                logger.info(f"Cancelled {cancelled} queued stars (not yet started).")
+
+        # Drain all remaining futures (in-flight when loop ended or Ctrl+C hit).
+        # _drain_one() checkpoints and logs on cadence here too — without this,
+        # all the work completed after the submission loop exits would never
+        # be flushed to progress.csv, and --resume would re-do it.
+        for f in as_completed(future_to_tic):
+            tid = future_to_tic[f]
+            _drain_one(f, tid)
+
+    # Final checkpoint
     save_progress(pd.DataFrame(progress_records, columns=PROGRESS_COLS), progress_csv)
 
     size_gb = directory_size_gb(out_dir)

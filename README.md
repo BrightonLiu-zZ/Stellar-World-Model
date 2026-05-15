@@ -63,12 +63,11 @@ See [docs/STATUS.md](docs/STATUS.md) for current counts and progress on each sta
 ## Setup
 
 ```bash
-conda create -n astro python=3.10
+conda env create -f environment.yml
 conda activate astro
-pip install astroquery lightkurve astropy pandas numpy scipy tenacity
 ```
 
-> No `environment.yml` is committed yet. The package list above reflects the current working environment; exact versions are not pinned.
+`environment.yml` pins the direct dependencies used by this project (Python 3.10, numpy, pandas, scipy, astropy, astroquery, lightkurve, tenacity, scikit-learn, PyTorch). Full transitive dependency versions are captured in the conda env export used to generate it.
 
 ## Usage
 

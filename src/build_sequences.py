@@ -46,6 +46,7 @@ import urllib3.exceptions
 import lightkurve as lk
 
 SHORT_NAN_RUN = 10  # NaN runs <= this length classify a window as B; longer → C
+_TIME_GAP_MULTIPLIER = 5  # cadences with gap > 5x median diff get flux=NaN, splitting segments at real observing breaks (mid-sector downlink). See docs/adr/0003-segment-on-time-gap.md.
 
 # Transient network exceptions that warrant retry. lightkurve calls into
 # astroquery -> requests -> urllib3 -> socket; any layer can surface a blip.
@@ -422,6 +423,18 @@ def process_star(
             logger.warning(f"TIC {tic_id} sector {sector}: QUALITY column absent — proceeding without quality mask")
 
         time_arr = np.asarray(lc.time.value, dtype=np.float32)  # TBJD, parallel to flux
+
+        # Mark post-gap cadences NaN so find_segments splits at real observing breaks
+        # (e.g. mid-sector downlink). Mirrors build_sequences_bulk.read_fits — see
+        # docs/adr/0003-segment-on-time-gap.md.
+        if len(time_arr) > 1:
+            diffs = np.diff(time_arr)
+            median_diff = np.median(diffs)
+            if np.isfinite(median_diff) and median_diff > 0:
+                gap_mask = np.concatenate(
+                    [[False], diffs > _TIME_GAP_MULTIPLIER * median_diff]
+                )
+                flux[gap_mask] = np.nan
 
         for seg_idx, (s, e) in enumerate(find_segments(flux, gap_threshold)):
             res.d_segs_total += 1

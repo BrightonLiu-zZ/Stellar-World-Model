@@ -9,3 +9,9 @@ __pycache__/
 session-notes/
 *.log
 papers/
+.agents/
+skills-lock.json
+CONTEXT.md
+spoc_sector_map.csv
+bulk_download_plan.md
+*.png

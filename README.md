@@ -31,7 +31,7 @@ See [docs/architecture.md](docs/architecture.md) for full design rationale, abla
 
 | Stage | Script / Notebook | Description |
 |---|---|---|
-| 0a | `src/notebooks/characterize_data_v2.ipynb` (legacy) → `spoc_sector_map.csv` | TIC list for the bulk pipeline (Tmag<10, no plx cut per ADR-0002): 195,883 TICs × SPOC sector pairs. `processed/df_final.csv` is the legacy 34k-row output kept for reference. |
+| 0a | `src/notebooks/characterize_data_v2.ipynb` (legacy) → `processed/spoc_sector_map.csv` | TIC list for the bulk pipeline (Tmag<10, no plx cut per ADR-0002): 195,883 TICs × SPOC sector pairs. `processed/df_final.csv` is the legacy 34k-row output kept for reference. |
 | 0b | `src/build_sequences_bulk.py` (canonical) / `src/build_sequences.py` (deprecated) | Bulk MAST curl-script download of SPOC PDCSAP_FLUX, segment at NaN gaps and at time gaps > 5× median cadence (ADR-0003), MAD-normalize, slide windows, save NaN-free windows to `processed/sequences/*.npz` |
 | 0c | `src/build_labels.py` | Cross-match TIC IDs to APOGEE DR17 → GSP-Spec → LAMOST DR11 → `labels/stellar_params.csv` |
 | 0d | `src/build_variability_labels.py` | Cross-match TIC IDs to TARS + flatwrm2 + TOI → `labels/variability_labels_star.csv` |
@@ -44,7 +44,7 @@ See [docs/STATUS.md](docs/STATUS.md) for current counts and progress on each sta
 
 ### Input
 - **Source:** TESS SPOC 2-min cadence, PDCSAP_FLUX only (never SAP_FLUX)
-- **Sample:** ~195k TICs (Tmag < 10, no parallax cut; see `docs/adr/0002-drop-plx-cut.md`) with ≥ 1 SPOC sector — listed in `spoc_sector_map.csv` (669k (TIC, sector) pairs). The earlier 34k-star sample (Tmag<7, plx>10 mas) is retained only as `processed/df_final.csv` and is no longer used.
+- **Sample:** ~195k TICs (Tmag < 10, no parallax cut; see `docs/adr/0002-drop-plx-cut.md`) with ≥ 1 SPOC sector — listed in `processed/spoc_sector_map.csv` (669k (TIC, sector) pairs). The earlier 34k-star sample (Tmag<7, plx>10 mas) is retained only as `processed/df_final.csv` and is no longer used.
 - **Access:** MAST bulk curl scripts per sector (canonical) → FITS via `astropy.io.fits`; `lightkurve` retained for single-star debugging. No FITS files are committed to this repo.
 
 ### Labels
@@ -102,7 +102,7 @@ src/
   build_labels.py               Stage 0c
   build_variability_labels.py   Stage 0d
   notebooks/                    Stage 0a + EDA + sanity checks
-spoc_sector_map.csv             Stage 0a output: (TIC, tmag, sector) for the bulk pipeline (195k TICs)
+processed/spoc_sector_map.csv   Stage 0a output: (TIC, tmag, sector) for the bulk pipeline (195k TICs)
 processed/
   df_final.csv                  legacy Stage 0a output (34k TICs, plx>10), no longer used
   sequences/                    per-segment .npz files — Stage 0b canonical output (gap-guarded, ADR-0003)

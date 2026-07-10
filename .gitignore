@@ -20,8 +20,10 @@ wandb/
 .pytest_cache/
 .vscode/
 results/
+experiments/**/packed/
 outputs/
 src/swm/
 src/tests/
 models/
 src/legacy/
+tmp/

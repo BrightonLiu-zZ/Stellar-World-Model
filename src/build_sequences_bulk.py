@@ -43,6 +43,7 @@ import urllib3.exceptions
 from astropy.io import fits
 
 SHORT_NAN_RUN = 10
+MAX_FLUX_ABSMAX: float = 20.0
 _TIME_GAP_MULTIPLIER = 5  # cadences with gap > 5x median diff get flux=NaN, splitting segments at real observing breaks (e.g. mid-sector downlink). See docs/adr/0003-segment-on-time-gap.md.
 
 _TRANSIENT_EXCEPTIONS: tuple = (
@@ -70,7 +71,7 @@ def parse_args() -> argparse.Namespace:
         description="Stage 0b (bulk): download + segment + window TESS light curves via MAST curl scripts.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    ap.add_argument("--sector-map", default="spoc_sector_map.csv",
+    ap.add_argument("--sector-map", default="processed/spoc_sector_map.csv",
                     help="CSV with columns tic_id, tmag, sector")
     ap.add_argument("--out-dir", default="processed/sequences",
                     help="Where to save per-segment .npz files")
@@ -102,6 +103,9 @@ def parse_args() -> argparse.Namespace:
                     help="Flush progress CSV every N completed (TIC,sector) pairs")
     ap.add_argument("--max-consecutive-errors", type=int, default=10,
                     help="Abort sector after this many consecutive errors (0=disable)")
+    ap.add_argument("--max-flux-absmax", type=float, default=MAX_FLUX_ABSMAX,
+                    help="Reject a run if any window's abs-max exceeds this threshold "
+                         "(MAD-normalised units). Set <= 0 to disable. Default: %(default)s")
     return ap.parse_args()
 
 
@@ -158,6 +162,7 @@ class Stats:
     windows_class_a: int = 0
     windows_class_b: int = 0
     windows_class_c: int = 0
+    segments_outlier: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +382,7 @@ class PairResult:
     d_win_a: int = 0
     d_win_b: int = 0
     d_win_c: int = 0
+    d_segs_outlier: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +399,7 @@ def process_one(
     window_size: int,
     stride: int,
     gap_threshold: int,
+    max_flux_absmax: float,
     logger: logging.Logger,
 ) -> PairResult:
     res = PairResult(tic_id=tic_id, sector=sector,
@@ -444,6 +451,9 @@ def process_one(
                 if len(run) >= seq_len:
                     arr = np.stack(run, axis=0).astype(np.float32)
                     arr = arr.reshape(arr.shape[0], window_size, 1)
+                    if max_flux_absmax > 0 and np.abs(arr).max() > max_flux_absmax:
+                        res.d_segs_outlier += 1
+                        continue
                     times_stacked = np.stack(run_times, axis=0).astype(np.float32)
                     out_path = out_dir / (
                         f"TIC{tic_id:010d}_s{sector:02d}"
@@ -511,7 +521,7 @@ def save_progress(df: pd.DataFrame, path: Path) -> None:
 # Resume: scan existing .npz files for already-done (tic_id, sector) pairs
 # ---------------------------------------------------------------------------
 
-_NPZ_RE = re.compile(r"TIC(\d{10})_s(\d{2})_")
+_NPZ_RE = re.compile(r"TIC(\d+)_s(\d+)_")
 
 
 def scan_existing_npz(sequences_dir: Path) -> set[tuple[int, int]]:
@@ -614,6 +624,7 @@ def main() -> int:
         stats.windows_class_a   += res.d_win_a
         stats.windows_class_b   += res.d_win_b
         stats.windows_class_c   += res.d_win_c
+        stats.segments_outlier  += res.d_segs_outlier
         if res.status == "done":
             stats.pairs_done += 1
         else:
@@ -671,6 +682,7 @@ def main() -> int:
                     tic_id, sector, url,
                     out_dir, fits_dir,
                     args.seq_len, args.window_size, args.stride, args.gap_threshold,
+                    args.max_flux_absmax,
                     logger,
                 ): (tic_id, sector)
                 for tic_id, url in to_process
@@ -743,6 +755,7 @@ def main() -> int:
     logger.info(f"Total segments produced:          {stats.segments_total}")
     logger.info(f"Segments saved (>= seq_len):      {stats.segments_saved}")
     logger.info(f"Segments discarded (too short):   {stats.segments_too_short}")
+    logger.info(f"Segments rejected (flux outlier): {stats.segments_outlier}")
     logger.info(f"Total candidate windows:          {total_class}")
     logger.info(f"  Class A (NaN-free, kept):       {stats.windows_class_a}  ({pct(stats.windows_class_a):.1f}%)")
     logger.info(f"  Class B (NaN runs all <= 10):   {stats.windows_class_b}  ({pct(stats.windows_class_b):.1f}%)")

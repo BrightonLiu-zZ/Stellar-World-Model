@@ -4,15 +4,15 @@ download_cdpp.py
 Downloads TESS SPOC 2-min CDPP CSV files from MAST and builds a
 sector-availability lookup table for your TIC list.
 
-Output files (all saved in the same directory as this script):
-  cdpp_raw/          — raw per-sector CSV files from MAST
-  spoc_sector_map.csv — final lookup: tic_id | sector | tmag
+Output files (saved relative to --out-dir, default: cwd = repo root):
+  data/cdpp_raw/     — raw per-sector CSV files from MAST
+  processed/spoc_sector_map.csv — final lookup: tic_id | sector | tmag
 
-Usage:
-  python download_cdpp.py                  # full run (sectors 1-101)
-  python download_cdpp.py --tmag-max 10    # only keep Tmag < 10 (default)
-  python download_cdpp.py --sectors 1-26   # only download sectors 1 to 26
-  python download_cdpp.py --resume         # skip already-downloaded sectors
+Usage (run from repo root):
+  python src/download_cdpp.py                  # full run (sectors 1-101)
+  python src/download_cdpp.py --tmag-max 10    # only keep Tmag < 10 (default)
+  python src/download_cdpp.py --sectors 1-26   # only download sectors 1 to 26
+  python src/download_cdpp.py --resume         # skip already-downloaded sectors
 """
 
 import argparse
@@ -220,7 +220,8 @@ def main():
     master = pd.concat(chunks, ignore_index=True)
     master = master.sort_values(["tic_id", "sector"]).reset_index(drop=True)
 
-    out_path = out_dir / "spoc_sector_map.csv"
+    out_path = out_dir / "processed" / "spoc_sector_map.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     master.to_csv(out_path, index=False)
 
     n_stars = master["tic_id"].nunique()

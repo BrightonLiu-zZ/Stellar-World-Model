@@ -1,0 +1,4 @@
+# @package _global_
+variant_name: B # full world model: adds GRU latent-dynamics loss
+train:
+  lambda_dyn: 1.0

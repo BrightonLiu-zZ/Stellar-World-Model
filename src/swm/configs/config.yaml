@@ -1,0 +1,16 @@
+defaults:
+  - paths: local
+  - data: default
+  - model: default
+  - train: default
+  - variant: B
+  - _self_
+
+seed: 0
+exp_name: exp00_window1024_seq4 # experiment namespace; routes experiments/<exp_name>/{packed,models,results}. Override via +experiment=...
+
+hydra:
+  run:
+    dir: ${paths.repo_root}/outputs/${hydra:job.name}/${now:%Y%m%d-%H%M%S}
+  job:
+    chdir: false

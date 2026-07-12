@@ -1,0 +1,10 @@
+# @package _global_
+# Ablation 01: shrink reconstruction window 1024 -> 256, raise seq_len 4 -> 16 to hold the
+# physical horizon at 4096 cadences. z_dim stays 128 (locked) -> 4x bits/timestep. Tests
+# whether the low-pass shortcut weakens. Windows are subdivided from the stored 1024-cadence
+# .npz at pack time (Path A); 1024 % 256 == 0 triggers auto-subdivision in swm.data.pack.
+# Usage: python -m swm.<stage> +experiment=exp01_window256_seq16 variant=B seed=0
+exp_name: exp01_window256_seq16
+data:
+  window: 256
+  seq_len: 16

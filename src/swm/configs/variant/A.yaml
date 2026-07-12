@@ -1,0 +1,4 @@
+# @package _global_
+variant_name: A # VAE-only baseline: reconstruction + KL, no dynamics term
+train:
+  lambda_dyn: 0.0

@@ -1,0 +1,4 @@
+# @package _global_
+variant_name: C # strong-dynamics ablation (deferred to cluster; addable by config alone)
+train:
+  lambda_dyn: 5.0

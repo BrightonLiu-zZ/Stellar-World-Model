@@ -22,7 +22,6 @@ wandb/
 results/
 experiments/**/packed/
 outputs/
-src/swm/
 src/tests/
 models/
 src/legacy/

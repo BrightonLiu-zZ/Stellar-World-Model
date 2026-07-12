@@ -1,0 +1,7 @@
+repo_root: C:/git_repo/Stellar-World-Model
+sequences_dir: ${.repo_root}/processed/sequences
+labels_csv: ${.repo_root}/labels/variability_labels_star.csv
+subset_dir: ${.repo_root}/processed/subset # shared across experiments (window-independent TIC split)
+packed_dir: ${.repo_root}/experiments/${exp_name}/packed # window-dependent; per-experiment
+models_dir: ${.repo_root}/experiments/${exp_name}/models # per-experiment checkpoints + extracted mu
+results_dir: ${.repo_root}/experiments/${exp_name}/results # per-experiment probe tables

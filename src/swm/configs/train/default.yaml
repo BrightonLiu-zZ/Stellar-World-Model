@@ -1,0 +1,16 @@
+lambda_dyn: 1.0 # dynamics-loss weight; the ONE knob that differs A vs B (overridden by variant group)
+beta_target: 1.0 # final KL weight after warmup
+beta_warmup_epochs: 10 # linear 0 --> beta_target over these epochs (anti posterior-collapse)
+free_bits: 0.1 # nats per latent dim; KL floor so dims cannot collapse. Keep floor (0.1*z) below true KL so KL stays active (0.5 made the floor 64 > true KL ~36 -> KL gradient dead).
+lr: 0.0003
+max_epochs: 100
+patience: 15 # early-stop after this many epochs without val_total improvement
+grad_clip: 1.0 # max grad norm (GRU stability)
+amp: true # mixed precision; near-essential on 8GB
+accum_steps: 1 # gradient accumulation; raise instead of forcing a larger batch
+active_unit_kl_threshold: 0.01 # a latent dim counts as "active" if its per-dim KL exceeds this (nats)
+resume: true # resume from last.pt if present
+wandb:
+  mode: online # online | offline | disabled
+  project: stellar-world-model
+  entity: null # null --> default entity from `wandb login`

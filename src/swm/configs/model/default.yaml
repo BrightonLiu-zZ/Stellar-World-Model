@@ -1,0 +1,6 @@
+z_dim: 128 # latent dim (locked v1)
+in_ch: 1 # single flux channel
+enc_channels: [32, 64, 128, 256] # 4 conv stages, each halves length via MaxPool stride 2
+kernel_size: 5
+gru_hidden: 256 # dynamics GRU hidden size
+gru_layers: 1

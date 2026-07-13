@@ -1,0 +1,15 @@
+# @package _global_
+# exp02a: add a log-power-spectrum reconstruction term (amplitude-retaining) on top of the time-MSE,
+# at window 256 / seq_len 16 (reuse exp01 packed). Attacks the low-pass shortcut the skyline proved
+# discards the pulsating frequency signal from mu. weight is order-matched to the time-MSE scale from
+# a smoke run, then swept over a x2 bracket via train.recon_aux.weight= on the CLI.
+# Usage: python -m swm.<stage> +experiment=exp02a_logpsd_amp variant=B seed=0
+exp_name: exp02a_logpsd_amp
+data:
+  window: 256
+  seq_len: 16
+train:
+  recon_aux:
+    type: log_psd
+    weight: 0.1
+    psd_normalize: false

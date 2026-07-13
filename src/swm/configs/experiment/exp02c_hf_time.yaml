@@ -1,0 +1,13 @@
+# @package _global_
+# exp02c: high-pass time-domain term (MSE on the first difference of the flux) instead of a spectral one.
+# A cheaper high-pass alternative that tilts reconstruction toward fast structure; the rotation task is
+# the stress-test here, since differencing de-emphasizes the slow modulation rotation depends on.
+# Usage: python -m swm.<stage> +experiment=exp02c_hf_time variant=B seed=0
+exp_name: exp02c_hf_time
+data:
+  window: 256
+  seq_len: 16
+train:
+  recon_aux:
+    type: hf_time
+    weight: 0.1

@@ -8,11 +8,19 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 import wandb
 from swm.data.dataset import SeqWindowDataset
 from swm.models import WorldModel
-from swm.train.losses import dynamics_loss, kl_free_bits, recon_loss
+from swm.train.losses import (
+    dynamics_loss,
+    hf_time_loss,
+    kl_free_bits,
+    make_keep_mask,
+    recon_loss,
+    spectral_recon_loss,
+)
 from swm.utils.seed import set_seed
 
 log = logging.getLogger(__name__)
@@ -52,6 +60,26 @@ def beta_at_epoch(epoch: int, warmup: int, target: float) -> float:
     return target * min(1.0, epoch / warmup)
 
 
+def additive_aux_loss(recon: torch.Tensor, target: torch.Tensor, aux_cfg: DictConfig) -> torch.Tensor:
+    """
+    Auxiliary reconstruction term for the exp02 objective sweep, selected by aux_cfg.type.
+    log_psd is the log-power-spectrum MSE; hf_time is the high-pass first-difference MSE; combined sums the
+    log_psd term and hf_weight-scaled hf_time term into one general (pretrain-once) objective.
+    The masked and none types add nothing here (masked corrupts the input upstream and still uses the plain
+    time-MSE), so this returns a zero scalar for them.
+    """
+    # recon, target: (B, S, window, 1)
+    atype = aux_cfg.type
+    if atype == "log_psd":
+        return spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps))
+    if atype == "hf_time":
+        return hf_time_loss(recon, target)
+    if atype == "combined":
+        spectral = spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps))
+        return spectral + float(aux_cfg.hf_weight) * hf_time_loss(recon, target) # one objective over all bands
+    return torch.zeros((), device=recon.device) # none, masked
+
+
 def run_epoch(
     model: WorldModel,
     loader: DataLoader,
@@ -70,7 +98,10 @@ def run_epoch(
     """
     model.train(train)
     accum = max(1, int(cfg.train.accum_steps))
-    sums = {"recon": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "total": 0.0}
+    aux_cfg = cfg.train.recon_aux
+    aux_weight = float(aux_cfg.weight)
+    window = int(cfg.data.window)
+    sums = {"recon": 0.0, "aux": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "total": 0.0}
     kl_dim_sum = torch.zeros(cfg.model.z_dim)
     n_batches = 0
 
@@ -78,14 +109,19 @@ def run_epoch(
         optimizer.zero_grad()
     grad_context = torch.enable_grad() if train else torch.no_grad()
     with grad_context:
-        for batch_idx, x in enumerate(loader):
+        for batch_idx, x in enumerate(tqdm(loader, desc="train" if train else "val", total=len(loader), leave=False)):
             x = x.to(device, non_blocking=True) # (B, S, window, 1)
+            x_in = x
+            if aux_cfg.type == "masked":
+                keep = make_keep_mask(x.shape[0] * x.shape[1], window, float(aux_cfg.mask_frac), int(aux_cfg.mask_span), device)
+                x_in = x * keep.view(x.shape[0], x.shape[1], window, 1) # corrupt the input; the target stays clean
             with autocast("cuda", enabled=bool(cfg.train.amp)):
-                out = model(x)
-                rl = recon_loss(out["recon"], x)
+                out = model(x_in)
+                rl = recon_loss(out["recon"], x) # always reconstruct the CLEAN window
                 kl_loss, kl_total, kl_dim = kl_free_bits(out["mu_seq"], out["logvar_seq"], cfg.train.free_bits)
                 dl = dynamics_loss(out["pred_next"], out["target_next"])
-                loss = rl + beta * kl_loss + cfg.train.lambda_dyn * dl
+                al = additive_aux_loss(out["recon"], x, aux_cfg)
+                loss = rl + aux_weight * al + beta * kl_loss + cfg.train.lambda_dyn * dl
             if train:
                 scaler.scale(loss / accum).backward()
                 if (batch_idx + 1) % accum == 0:
@@ -95,6 +131,7 @@ def run_epoch(
                     scaler.update()
                     optimizer.zero_grad()
             sums["recon"] += float(rl)
+            sums["aux"] += float(al)
             sums["kl_total"] += float(kl_total)
             sums["kl_loss"] += float(kl_loss)
             sums["dyn"] += float(dl)
@@ -148,8 +185,8 @@ def train(cfg: DictConfig) -> None:
     wandb.init(
         project=cfg.train.wandb.project,
         entity=cfg.train.wandb.entity,
-        group=cfg.variant_name, # A and B share a group so they overlay on one chart
-        name=run_name,
+        group=cfg.exp_name, # one W&B group per experiment (A/B/C of a sweep combo overlay within it)
+        name=f"{cfg.exp_name}_{run_name}", # include exp_name so sweep combos are distinguishable in W&B
         mode=cfg.train.wandb.mode,
         config=OmegaConf.to_container(cfg, resolve=True),
     )
@@ -168,8 +205,9 @@ def train(cfg: DictConfig) -> None:
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scaler.load_state_dict(ckpt["scaler"])
-        torch.set_rng_state(ckpt["torch_rng"])
-        torch.cuda.set_rng_state_all(ckpt["cuda_rng"])
+        # RNG states must be CPU ByteTensors; map_location=device moved them to the GPU, so pull them back.
+        torch.set_rng_state(ckpt["torch_rng"].cpu())
+        torch.cuda.set_rng_state_all([state.cpu() for state in ckpt["cuda_rng"]])
         np.random.set_state(ckpt["numpy_rng"])
         start_epoch = int(ckpt["epoch"]) + 1
         best_val = float(ckpt["best_val"])
@@ -181,12 +219,17 @@ def train(cfg: DictConfig) -> None:
         va = run_epoch(model, val_loader, None, scaler, cfg, beta, device, train=False)
 
         # Select checkpoints on the validation training loss at the steady TARGET beta, using the same
-        # free-bits KL the model actually optimizes (kl_loss): monitor = recon + beta_target*kl_loss + lambda*dyn.
+        # free-bits KL the model actually optimizes (kl_loss): monitor = recon + aux_weight*aux +
+        # beta_target*kl_loss + lambda*dyn. The exp02 aux term MUST appear here or best-checkpoint selection
+        # would ignore the new objective (the same bug class as the old beta=0 untrained-epoch selection).
         # Restricted to AFTER warmup. The scheduled-beta total is minimized at beta=0 (untrained), and during
         # warmup beta/KL are in flux (a transient KL dip can falsely win); judging only post-warmup epochs at a
         # fixed beta makes the metric comparable so it tracks genuine fit, not the warmup transient.
         warmup = int(cfg.train.beta_warmup_epochs)
-        val_monitor = va["recon"] + float(cfg.train.beta_target) * va["kl_loss"] + float(cfg.train.lambda_dyn) * va["dyn"]
+        val_monitor = (
+            va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"]
+            + float(cfg.train.beta_target) * va["kl_loss"] + float(cfg.train.lambda_dyn) * va["dyn"]
+        )
 
         record = {"epoch": epoch, "beta": beta, "lr": cfg.train.lr, "val/monitor": val_monitor}
         for key, value in tr.items():
@@ -196,8 +239,8 @@ def train(cfg: DictConfig) -> None:
         wandb.log(record, step=epoch)
         log.info(
             f"[{run_name}] ep {epoch} beta {beta} "
-            f"train recon {tr['recon']} KL {tr['kl_total']} dyn {tr['dyn']} "
-            f"val recon {va['recon']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
+            f"train recon {tr['recon']} aux {tr['aux']} KL {tr['kl_total']} dyn {tr['dyn']} "
+            f"val recon {va['recon']} aux {va['aux']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
         )
 
         save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg)

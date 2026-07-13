@@ -10,6 +10,14 @@ amp: true # mixed precision; near-essential on 8GB
 accum_steps: 1 # gradient accumulation; raise instead of forcing a larger batch
 active_unit_kl_threshold: 0.01 # a latent dim counts as "active" if its per-dim KL exceeds this (nats)
 resume: true # resume from last.pt if present
+recon_aux: # auxiliary reconstruction objective (exp02 sweep); default type=none/weight=0 keeps exp00/exp01 unchanged
+  type: none # none | log_psd | hf_time | combined | masked
+  weight: 0.0 # weight on the aux term; order-matched to the time-MSE scale per variant from smoke magnitudes
+  psd_normalize: false # log_psd/combined: false=amplitude-retaining raw power, true=sum-1 spectral shape
+  psd_eps: 1.0e-8 # floor inside log(power + eps) for the spectral term
+  hf_weight: 1.0 # combined only: weight of the hf_time sub-term relative to the log_psd sub-term
+  mask_frac: 0.0 # masked only: fraction of each window's timesteps corrupted to zero
+  mask_span: 8 # masked only: contiguous span length (cadences) per corrupted block
 wandb:
   mode: online # online | offline | disabled
   project: stellar-world-model

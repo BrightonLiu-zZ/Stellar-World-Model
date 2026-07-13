@@ -1,0 +1,14 @@
+# @package _global_
+# exp02b: same log-PSD term as exp02a but normalized to spectral SHAPE (power sums to one per window),
+# so amplitude is discarded and only the frequency-shape morphology is matched. Tests whether pulsation
+# amplitude carries signal beyond spectral shape (which the time-MSE already covers).
+# Usage: python -m swm.<stage> +experiment=exp02b_logpsd_shape variant=B seed=0
+exp_name: exp02b_logpsd_shape
+data:
+  window: 256
+  seq_len: 16
+train:
+  recon_aux:
+    type: log_psd
+    weight: 0.1
+    psd_normalize: true

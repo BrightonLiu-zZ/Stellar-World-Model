@@ -1,0 +1,15 @@
+# @package _global_
+# exp02e: masked denoising reconstruction. Contiguous spans of the input window are corrupted to zero and
+# the decoder must reconstruct the clean window, forcing the encoder to use temporal context rather than
+# copying the low-frequency envelope. Task-agnostic; no additive spectral term (weight stays 0).
+# Usage: python -m swm.<stage> +experiment=exp02e_masked variant=B seed=0
+exp_name: exp02e_masked
+data:
+  window: 256
+  seq_len: 16
+train:
+  recon_aux:
+    type: masked
+    weight: 0.0
+    mask_frac: 0.25
+    mask_span: 8

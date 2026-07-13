@@ -18,7 +18,6 @@ bulk_download_plan.md
 src/notebooks/legacy/
 wandb/
 .pytest_cache/
-.vscode/
 results/
 experiments/**/packed/
 outputs/

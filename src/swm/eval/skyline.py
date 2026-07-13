@@ -44,6 +44,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score
 from sklearn.preprocessing import StandardScaler
+from tqdm.auto import tqdm
 
 from swm.eval.features import FEATURE_NAMES, extract_features
 from swm.models import WorldModel
@@ -52,7 +53,7 @@ from swm.models.encoder import Encoder
 log = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-TASKS_DEFAULT = ("pulsating", "eb")
+TASKS_DEFAULT = ("pulsating", "eb", "rotation", "transit") # exp02 gates all four; transit is report-only
 B1_SEEDS_DEFAULT = (0, 1, 2)
 
 
@@ -99,7 +100,7 @@ def feature_table(packed_dir: Path, window: int, subset: pd.DataFrame, tasks: tu
     for split in ["train", "test"]:
         tics, blocks = load_first_segment_blocks(packed_dir, split, window)
         feats = np.zeros((len(tics), len(FEATURE_NAMES)), dtype=np.float64)
-        for i in range(len(blocks)):
+        for i in tqdm(range(len(blocks)), desc=f"features[{split}]", total=len(blocks)):
             feats[i] = extract_features(blocks[i].reshape(-1)) # first-segment concatenated flux
         labelled = _attach_labels(tics, split, subset, tasks)
         feat_df = pd.DataFrame(feats, columns=FEATURE_NAMES)
@@ -120,7 +121,7 @@ def encoder_mu_table(
     for split in ["train", "test"]:
         tics, blocks = load_first_segment_blocks(packed_dir, split, window)
         mu_star = np.zeros((len(tics), len(mu_cols)), dtype=np.float32)
-        for i in range(len(blocks)):
+        for i in tqdm(range(len(blocks)), desc=f"encode-mu[{split}]", total=len(blocks)):
             x = torch.from_numpy(blocks[i]).unsqueeze(-1).to(device) # (n_win, window, 1)
             with torch.no_grad():
                 mu, _ = model.encoder(x) # (n_win, z)
@@ -242,7 +243,8 @@ def train_b1_one_seed(
     best_val = -1.0
     best_state = None
     patience_ctr = 0
-    for epoch in range(max_epochs):
+    epoch_bar = tqdm(range(max_epochs), desc=f"B1 seed{seed}", total=max_epochs) # early-stops before max
+    for epoch in epoch_bar:
         model.train()
         for batch in _b1_batches(len(train_blocks), batch_stars, rng, shuffle=True):
             windows = np.concatenate([train_blocks[i] for i in batch], axis=0)
@@ -261,6 +263,7 @@ def train_b1_one_seed(
             patience_ctr = 0
         else:
             patience_ctr += 1
+        epoch_bar.set_postfix(val_ap=round(val_ap, 4), best=round(best_val, 4), patience=patience_ctr)
         if patience_ctr >= patience:
             break
     model.load_state_dict(best_state)
@@ -420,24 +423,32 @@ def run_suite(
         tics_un, _, s_untrained = logistic_scores(mu_untrained, mu_cols, task)
         tics_a1, _, s_a1 = logistic_scores(feats, FEATURE_NAMES, task)
         tics_a2, _, s_a2 = forest_scores(feats, FEATURE_NAMES, task)
-        tics_b1, y_b1, s_b1, b1_per_seed = b1_scores(
-            packed_dir, window, subset, task, enc_channels, kernel_size, z_dim, device, b1_seeds
-        )
         # Disambiguating diagnostic (grill 2026-07-11): a nonlinear probe on the encoder mu, to tell
         # "info is in mu but a linear probe cannot read it" (-> Branch beta) from "mu lacks the info"
         # (-> Branch alpha). GBM on the UNTRAINED mu is the reference: if it beats GBM on the trained
         # mu, the SSL objective is actively discarding discriminative variance a random projection kept.
         tics_tg, _, s_trained_gbm = forest_scores(mu_trained, mu_cols, task)
         tics_ug, _, s_untrained_gbm = forest_scores(mu_untrained, mu_cols, task)
-        for other in [tics_un, tics_a1, tics_a2, tics_b1, tics_tg, tics_ug]:
-            assert np.array_equal(tics_tr, other), "method test-star orders diverged; alignment broken"
-        assert np.array_equal(y, y_b1), "B1 labels misaligned with the shared test order"
+        aligned = [tics_un, tics_a1, tics_a2, tics_tg, tics_ug]
 
         scores_by_method = {
             "trained": s_trained, "untrained": s_untrained,
-            "A1_logistic": s_a1, "A2_gbm": s_a2, "B1_supervised": s_b1,
+            "A1_logistic": s_a1, "A2_gbm": s_a2,
             "trained_mu_gbm": s_trained_gbm, "untrained_mu_gbm": s_untrained_gbm,
         }
+        # B1 is the objective-INDEPENDENT supervised-trunk ceiling (random init, trained with labels), so it
+        # is computed once and reused across the sweep; b1_seeds=() skips it and leaves the B1 fields NaN.
+        run_b1 = len(b1_seeds) > 0
+        b1_per_seed = []
+        if run_b1:
+            tics_b1, y_b1, s_b1, b1_per_seed = b1_scores(
+                packed_dir, window, subset, task, enc_channels, kernel_size, z_dim, device, b1_seeds
+            )
+            aligned.append(tics_b1)
+            assert np.array_equal(y, y_b1), "B1 labels misaligned with the shared test order"
+            scores_by_method["B1_supervised"] = s_b1
+        for other in aligned:
+            assert np.array_equal(tics_tr, other), "method test-star orders diverged; alignment broken"
         boot = paired_bootstrap_ap(y, scores_by_method, n_boot=n_boot, seed=0)
         base_rate = float(y.mean())
 
@@ -465,8 +476,17 @@ def run_suite(
         se_diff = float(diff_a1.std())
         point_diff = point["A1_logistic"] - point["untrained"]
         headroom_real = bool(point_diff > 2 * se_diff)
-        gap_denom = point["B1_supervised"] - point["untrained"]
-        supervised_gap_frac = (point["trained"] - point["untrained"]) / gap_denom if abs(gap_denom) > 1e-9 else np.nan
+        # trained - untrained is the primary exp02 bellwether; the B1 gap fraction is only defined when B1 ran.
+        trained_gap = point["trained"] - point["untrained"]
+        if run_b1:
+            b1_point = point["B1_supervised"]
+            gap_denom = b1_point - point["untrained"]
+            supervised_gap_frac = trained_gap / gap_denom if abs(gap_denom) > 1e-9 else np.nan
+            b1_per_seed_str = ";".join(str(round(v, 4)) for v in b1_per_seed)
+        else:
+            b1_point = np.nan
+            supervised_gap_frac = np.nan
+            b1_per_seed_str = ""
         # info_in_mu: does a nonlinear probe extract more from the trained mu than the linear probe?
         # False => mu lacks the signal (Branch alpha, objective change); True => probe/pooling (Branch beta).
         diff_mu = boot["trained_mu_gbm"] - boot["trained"]
@@ -476,8 +496,9 @@ def run_suite(
         gate_rows.append({
             "task": task,
             "trained": point["trained"], "untrained": point["untrained"],
-            "A1_logistic": point["A1_logistic"], "A2_gbm": point["A2_gbm"], "B1_supervised": point["B1_supervised"],
-            "b1_per_seed": ";".join(str(round(v, 4)) for v in b1_per_seed),
+            "A1_logistic": point["A1_logistic"], "A2_gbm": point["A2_gbm"], "B1_supervised": b1_point,
+            "b1_per_seed": b1_per_seed_str,
+            "trained_minus_untrained": trained_gap,
             "A1_minus_untrained": point_diff, "se_diff": se_diff, "two_se_diff": 2 * se_diff,
             "headroom_real": headroom_real, "supervised_gap_frac": supervised_gap_frac,
             "trained_mu_gbm": point["trained_mu_gbm"], "untrained_mu_gbm": point["untrained_mu_gbm"],
@@ -502,8 +523,13 @@ def run_suite(
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    tasks = tuple(TASKS_DEFAULT)
-    summary, gate = run_suite(cfg.exp_name, tasks=tasks, variant=cfg.variant_name, seed=int(cfg.seed))
+    # Override tasks / B1 seeds from the CLI with a leading + (keys are not in the base config), e.g.
+    # +skyline_b1_seeds=[] skips the objective-independent B1 during the exp02 sweep.
+    tasks = tuple(cfg.get("skyline_tasks", TASKS_DEFAULT))
+    b1_seeds = tuple(cfg.get("skyline_b1_seeds", B1_SEEDS_DEFAULT))
+    summary, gate = run_suite(
+        cfg.exp_name, tasks=tasks, b1_seeds=b1_seeds, variant=cfg.variant_name, seed=int(cfg.seed)
+    )
     log.info(f"skyline summary:\n{summary}")
     log.info(f"skyline gate:\n{gate}")
 

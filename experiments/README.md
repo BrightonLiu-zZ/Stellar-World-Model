@@ -9,6 +9,8 @@ An ablation is expressed as one Hydra experiment-group YAML in `src/swm/configs/
 | exp00_window1024_seq4 | 1024 × 4 | A, B, C · seed 0 | (baseline) | reference | +0.008 (0.744 vs 0.736) |
 | exp01_window256_seq16 | 256 × 16 | B · seed 0 | [2026-07-09](../docs/plans/2026-07-09-window-shrink-ablation-exp01.md) | done | +0.003 (0.771 vs 0.768) — mechanism fixed, SSL≈untrained |
 | exp02\* recon-objective sweep (10 combos) | 256 × 16 | B · seed 0 | [2026-07-12](../docs/plans/2026-07-12-exp02-recon-objective-sweep.md) | done | linear gap still ≈0, but **GBM-on-trained-μ 0.767→0.82** (`info_in_mu` False→True) — objective fixed, linear readout is the new barrier. See [exp02_sweep_README.md](exp02_sweep_README.md) |
+| exp03_forensics (no training) | — | — | [2026-07-13](../docs/plans/2026-07-13-exp03-loss-forensics-and-wide-sweep.md) | done | H1–H5 all confirmed: checkpoint selection was 87–95 % clamp-saturated KL noise; every latent dim BELOW the free-bits floor (dead KL gradient). See [exp03_forensics/README.md](exp03_forensics/README.md) |
+| exp03\* KL-schedule × objective sweep (36 combos) | 256 × 16 | B · seed 0 | [2026-07-13](../docs/plans/2026-07-13-exp03-loss-forensics-and-wide-sweep.md) | training handed off | free_bits {0,.02,.05,.1} × β {0.1,0.3,1.0} × obj {none, logpsd_amp .1, combined .3}; dual checkpoints (best + best_recon_aux); eval fan readout {logistic,gbm,mlp} × pooling {mean,max,quantile,window_score} via `swm.eval.readout_sweep` |
 
 ## How to run an ablation
 

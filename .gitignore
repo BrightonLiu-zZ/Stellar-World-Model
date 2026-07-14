@@ -25,3 +25,5 @@ src/tests/
 models/
 src/legacy/
 tmp/
+experiments/exp03_forensics/
+experiments/exp03_eval_cache/

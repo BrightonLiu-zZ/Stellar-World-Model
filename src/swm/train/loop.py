@@ -147,8 +147,11 @@ def run_epoch(
     return metrics
 
 
-def save_checkpoint(path: Path, model: WorldModel, optimizer, scaler, epoch: int, best_val: float, cfg: DictConfig) -> None:
-    """Persist model, optimizer, AMP scaler, epoch, best val, and RNG state so a run resumes bit-identically."""
+def save_checkpoint(
+    path: Path, model: WorldModel, optimizer, scaler, epoch: int, best_val: float, cfg: DictConfig,
+    best_select: float | None = None,
+) -> None:
+    """Persist model, optimizer, AMP scaler, epoch, best val(s), and RNG state so a run resumes bit-identically."""
     torch.save(
         {
             "model": model.state_dict(),
@@ -156,6 +159,7 @@ def save_checkpoint(path: Path, model: WorldModel, optimizer, scaler, epoch: int
             "scaler": scaler.state_dict(),
             "epoch": epoch,
             "best_val": best_val,
+            "best_select": best_select, # best KL-free selection value (dual-checkpoint tracking); None pre-exp03
             "torch_rng": torch.get_rng_state(),
             "cuda_rng": torch.cuda.get_rng_state_all(),
             "numpy_rng": np.random.get_state(),
@@ -169,8 +173,11 @@ def train(cfg: DictConfig) -> None:
     """
     Pretrain one variant-by-seed run end to end.
     Sets up W&B, the model, the train/val loaders, then loops epochs with KL warmup, checkpointing
-    best (by val total) and last, early-stopping on val total. Logs the A-vs-B comparison curves
-    (recon, total KL, active units, dynamics) grouped by variant so runs overlay on one chart.
+    best (by val/monitor) and last, early-stopping when no tracked best improves for `patience` epochs.
+    With train.track_recon_aux_best a second best checkpoint (best_recon_aux.pt) is kept on the KL-free
+    selection metric (exp03 dual-checkpoint tracking).
+    Logs the A-vs-B comparison curves (recon, total KL, active units, dynamics) grouped by variant so
+    runs overlay on one chart.
     """
     set_seed(cfg.seed)
     device = "cuda"
@@ -181,6 +188,12 @@ def train(cfg: DictConfig) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     last_path = out_dir / "last.pt"
     best_path = out_dir / "best.pt"
+    # Dual-checkpoint tracking (exp03, grill 2026-07-13): the monitor's KL term is clamp-saturated noise
+    # (~90% of the metric; see experiments/exp03_forensics/README.md), so alongside best.pt we can track a
+    # second best on the KL-free selection metric recon + w*aux + lambda*dyn (dyn kept: it is a genuine fit
+    # term; only the indicted KL term is excluded). Default false reproduces exp00-02 exactly.
+    track_select = bool(cfg.train.get("track_recon_aux_best", False))
+    best_select_path = out_dir / "best_recon_aux.pt"
 
     wandb.init(
         project=cfg.train.wandb.project,
@@ -199,6 +212,7 @@ def train(cfg: DictConfig) -> None:
 
     start_epoch = 0
     best_val = float("inf")
+    best_select = float("inf")
     patience_ctr = 0
     if cfg.train.resume and last_path.exists():
         ckpt = torch.load(last_path, map_location=device, weights_only=False) # ckpt holds cfg dict + RNG state
@@ -211,7 +225,9 @@ def train(cfg: DictConfig) -> None:
         np.random.set_state(ckpt["numpy_rng"])
         start_epoch = int(ckpt["epoch"]) + 1
         best_val = float(ckpt["best_val"])
-        log.info(f"resumed {run_name} from epoch {start_epoch}, best_val {best_val}")
+        if ckpt.get("best_select") is not None: # key absent in pre-exp03 checkpoints
+            best_select = float(ckpt["best_select"])
+        log.info(f"resumed {run_name} from epoch {start_epoch}, best_val {best_val}, best_select {best_select}")
 
     for epoch in range(start_epoch, int(cfg.train.max_epochs)):
         beta = beta_at_epoch(epoch, int(cfg.train.beta_warmup_epochs), float(cfg.train.beta_target))
@@ -230,8 +246,14 @@ def train(cfg: DictConfig) -> None:
             va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"]
             + float(cfg.train.beta_target) * va["kl_loss"] + float(cfg.train.lambda_dyn) * va["dyn"]
         )
+        # KL-free selection metric for the dual checkpoint: the same fit terms minus the clamp-saturated
+        # KL noise that dominates val_monitor (exp03 forensic H2/H3).
+        val_select = (
+            va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"] + float(cfg.train.lambda_dyn) * va["dyn"]
+        )
 
-        record = {"epoch": epoch, "beta": beta, "lr": cfg.train.lr, "val/monitor": val_monitor}
+        record = {"epoch": epoch, "beta": beta, "lr": cfg.train.lr, "val/monitor": val_monitor,
+                  "val/monitor_recon_aux": val_select}
         for key, value in tr.items():
             record[f"train/{key}"] = value
         for key, value in va.items():
@@ -243,15 +265,28 @@ def train(cfg: DictConfig) -> None:
             f"val recon {va['recon']} aux {va['aux']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
         )
 
-        save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg)
-        if epoch >= warmup and val_monitor < best_val: # only steady-beta epochs are eligible as best
+        improved_monitor = epoch >= warmup and val_monitor < best_val # only steady-beta epochs are eligible as best
+        improved_select = track_select and epoch >= warmup and val_select < best_select
+        if improved_monitor:
             best_val = val_monitor
-            save_checkpoint(best_path, model, optimizer, scaler, epoch, best_val, cfg)
-            patience_ctr = 0
-        elif epoch >= warmup:
-            patience_ctr += 1
+        if improved_select:
+            best_select = val_select
+        # last.pt is written AFTER the best-value updates so a crash-resume sees the true bests (the old
+        # order stored pre-update values, letting a resumed run overwrite best.pt with a worse epoch).
+        save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+        if improved_monitor:
+            save_checkpoint(best_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+        if improved_select:
+            save_checkpoint(best_select_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+        if epoch >= warmup:
+            # With dual tracking, patience resets while EITHER best improves; stopping on the monitor alone
+            # would kill the run on KL noise while the KL-free metric is still improving.
+            if improved_monitor or improved_select:
+                patience_ctr = 0
+            else:
+                patience_ctr += 1
         if patience_ctr >= int(cfg.train.patience) and epoch >= warmup:
-            log.info(f"[{run_name}] early stop at epoch {epoch} (no monitor improvement for {patience_ctr})")
+            log.info(f"[{run_name}] early stop at epoch {epoch} (no improvement on any tracked best for {patience_ctr})")
             break
 
     wandb.finish()

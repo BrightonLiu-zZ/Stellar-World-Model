@@ -1,0 +1,17 @@
+# @package _global_
+# exp03: KL-schedule x objective wide sweep at the exp01 geometry (window 256 / seq_len 16), aimed by the
+# exp03 forensic (experiments/exp03_forensics/README.md): checkpoint selection was ~90% clamp-saturated KL
+# noise, so every run tracks a dual best (best.pt on the legacy monitor + best_recon_aux.pt on the KL-free
+# metric), and the grid sweeps free_bits (floor must drop below the true KL ~9 nats) x beta_target x objective.
+# The swept knobs (train.free_bits, train.beta_target, train.recon_aux.*) and the per-combo exp_name are CLI
+# overrides from the runner script; this file holds only the shared deltas.
+# Usage: python -m swm.train +experiment=exp03_klsweep exp_name=exp03_<combo> variant=B seed=0 \
+#            train.free_bits=0.02 train.beta_target=0.3 train.recon_aux.type=log_psd train.recon_aux.weight=0.1
+exp_name: exp03_klsweep
+data:
+  window: 256
+  seq_len: 16
+train:
+  track_recon_aux_best: true # dual checkpoint (grill 2026-07-13); selection axis costs no extra training
+  max_epochs: 60 # headroom over exp02's early-stopped 25-60 range; recon was still improving at every stop
+  patience: 10 # on BOTH tracked bests (stop only when neither improves)

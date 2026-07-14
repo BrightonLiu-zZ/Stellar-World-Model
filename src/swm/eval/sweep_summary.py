@@ -84,11 +84,69 @@ def summarize(root: Path = REPO_ROOT) -> tuple[pd.DataFrame, pd.DataFrame]:
     return ranked, long
 
 
+def summarize_readout_sweep(root: Path, exp_glob: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Aggregate the exp03 readout_sweep.csv files into the two decision tables of plan 2026-07-13.
+    Ranked table: one row per (exp_name, ckpt, readout, pooling) cell with its mean trained-untrained
+    gap over GATE_TASKS (the shared-encoder, pretrain-once column) plus per-task gaps. Per-task-best
+    table: for each task, the single best cell across the whole sweep (the per-task-encoder upper-bound
+    row the open framing fork asks to carry). Returns (ranked_cells, per_task_best).
+    """
+    parts = []
+    for exp_dir in sorted((root / "experiments").glob(exp_glob)):
+        sweep_path = exp_dir / "results" / "readout_sweep.csv"
+        if not sweep_path.exists():
+            continue
+        frame = pd.read_csv(sweep_path)
+        parts.append(frame.drop_duplicates(subset=["exp_name", "ckpt", "pooling", "readout", "task"], keep="last"))
+    assert parts, f"no readout_sweep.csv under experiments/{exp_glob}"
+    long = pd.concat(parts, ignore_index=True)
+
+    cell_rows = []
+    cell_keys = ["exp_name", "ckpt", "readout", "pooling"]
+    for keys, group in long.groupby(cell_keys):
+        gated = group[group["task"].isin(GATE_TASKS)]
+        if len(gated) < len(GATE_TASKS):
+            continue # cell not fully scored yet; skip rather than rank on partial tasks
+        record = dict(zip(cell_keys, keys))
+        record["mean_gated_gap"] = float(gated["gap"].mean())
+        for row in group.itertuples(index=False):
+            record[f"gap_{row.task}"] = row.gap
+            record[f"pr_auc_{row.task}"] = row.pr_auc
+        cell_rows.append(record)
+    ranked = pd.DataFrame(cell_rows).sort_values("mean_gated_gap", ascending=False).reset_index(drop=True)
+
+    best_rows = []
+    for task, group in long.groupby("task"):
+        best = group.loc[group["gap"].idxmax()]
+        best_rows.append({
+            "task": task, "exp_name": best["exp_name"], "ckpt": best["ckpt"], "readout": best["readout"],
+            "pooling": best["pooling"], "pr_auc": best["pr_auc"],
+            "pr_auc_untrained": best["pr_auc_untrained"], "gap": best["gap"],
+        })
+    per_task_best = pd.DataFrame(best_rows)
+    return ranked, per_task_best
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Aggregate the exp02 objective sweep")
+    parser = argparse.ArgumentParser(description="Aggregate an objective/readout sweep")
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
+    parser.add_argument("--mode", choices=["gate", "readout"], default="gate",
+                        help="gate = exp02 skyline_gate ranking (default); readout = exp03 readout_sweep ranking")
+    parser.add_argument("--exp-glob", default="exp03_*", help="readout mode: experiments/ glob to aggregate")
     args = parser.parse_args()
+
+    if args.mode == "readout":
+        ranked, per_task_best = summarize_readout_sweep(args.root, args.exp_glob)
+        out_path = args.root / "experiments" / "exp03_sweep_summary.csv"
+        ranked.to_csv(out_path, index=False)
+        best_path = args.root / "experiments" / "exp03_per_task_best.csv"
+        per_task_best.to_csv(best_path, index=False)
+        log.info(f"wrote {out_path} + {best_path}")
+        log.info(f"top cells (shared-encoder mean gap over {GATE_TASKS}):\n{ranked.head(20)}")
+        log.info(f"per-task best (upper-bound row):\n{per_task_best}")
+        return
 
     ranked, long = summarize(args.root)
     out_path = args.root / "experiments" / "exp02_sweep_summary.csv"

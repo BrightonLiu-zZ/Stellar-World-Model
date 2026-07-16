@@ -1,0 +1,5 @@
+task,exp_name,ckpt,readout,pooling,pr_auc,pr_auc_untrained,gap
+eb,exp03_fb0p02_b1p0_lpsd,best_recon_aux,logistic,mean,0.7873441142099594,0.7125878172203186,0.0747562969896408
+pulsating,exp03_fb0p02_b0p1_lpsd,best_recon_aux,logistic,mean,0.822181531433348,0.7674835379513198,0.0546979934820281
+rotation,exp03_fb0_b0p3_lpsd,best,gbm,mean,0.5859964852359805,0.506413076172947,0.0795834090630335
+transit,exp03_fb0p02_b1p0_lpsd,best_recon_aux,gbm,mean,0.2201247438398457,0.1321073902006726,0.0880173536391731

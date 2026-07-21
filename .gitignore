@@ -27,3 +27,5 @@ src/legacy/
 tmp/
 experiments/exp03_forensics/
 experiments/exp03_eval_cache/
+experiments/exp04_eval_cache/
+experiments/**/*.npz

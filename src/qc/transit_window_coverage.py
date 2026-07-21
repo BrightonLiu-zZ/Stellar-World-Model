@@ -77,8 +77,37 @@ def load_ephemerides(nasa_csv: Path, logger) -> dict[int, list[tuple[float, floa
     return eph
 
 
-def _median_duration(eph: dict[int, list[tuple[float, float, float]]]) -> float:
-    durs = [d for rows in eph.values() for (_, _, d) in rows if np.isfinite(d)]
+def load_ephemerides_with_disp(
+    nasa_csv: Path, logger, whitelist: set[str] = WHITELIST
+) -> dict[int, list[tuple[float, float, float, str]]]:
+    """Like `load_ephemerides` but keeps the TFOPWG disposition on every TOI row.
+
+    Returns {tic: [(P_days, T0_btjd, dur_days_or_nan, disp), ...]} over `whitelist` dispositions
+    with finite P (>0) and T0. `disp` is the upper-cased tfopwg_disp (CP/KP/PC/APC). The window
+    annotation path loads the FULL whitelist here and lets the notebook select any disposition
+    subset at eval time, so the same fold serves the KP+CP and KP+CP+PC knobs.
+    """
+    df = pd.read_csv(nasa_csv)
+    df["tfopwg_disp"] = df["tfopwg_disp"].astype(str).str.strip().str.upper()
+    df = df[df["tfopwg_disp"].isin(whitelist)].copy()
+    P = pd.to_numeric(df["pl_orbper"], errors="coerce")
+    T0 = pd.to_numeric(df["pl_tranmid"], errors="coerce")
+    dur_h = pd.to_numeric(df["pl_trandurh"], errors="coerce")
+    eph: dict[int, list[tuple[float, float, float, str]]] = {}
+    n_rows = 0
+    for tid, p, t0, dh, disp in zip(df["tid"], P, T0, dur_h, df["tfopwg_disp"]):
+        if pd.isna(tid) or pd.isna(p) or pd.isna(t0) or float(p) <= 0:
+            continue  # need positive P + finite T0 to fold
+        dur_days = float(dh) / 24.0 if pd.notna(dh) and float(dh) > 0 else float("nan")
+        eph.setdefault(int(tid), []).append((float(p), float(t0) - BTJD_OFFSET, dur_days, str(disp)))
+        n_rows += 1
+    logger.info(f"ephemerides+disp: {n_rows} TOI rows over {len(eph)} TICs "
+                f"(whitelist={sorted(whitelist)}, finite P+T0)")
+    return eph
+
+
+def _median_duration(eph: dict) -> float:
+    durs = [row[2] for rows in eph.values() for row in rows if np.isfinite(row[2])]  # row=(P,T0,dur[,disp])
     return float(np.median(durs)) if durs else (2.0 / 24.0)  # fallback 2 h
 
 

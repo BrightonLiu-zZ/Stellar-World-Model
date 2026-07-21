@@ -17,6 +17,9 @@ byte-identical (exact Phase-2 sanity check).
 
 Run (from repo root; needs labels/qc/transit_window_coverage.csv from transit_window_coverage.py):
     python src/qc/apply_transit_coverage_filter.py
+
+NOTE: this regenerates v2 from v1, wiping any later layers — re-run src/qc/apply_eb_review_drops.py
+afterwards to restore the EB manual-review drops.
 """
 from __future__ import annotations
 

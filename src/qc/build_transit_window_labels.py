@@ -40,11 +40,170 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from qc_common import find_project_root, setup_logging
-from transit_window_coverage import _median_duration, load_ephemerides
+from transit_window_coverage import _median_duration, load_ephemerides, load_ephemerides_with_disp
 
 NEAR_FACTOR = 1.5          # quarantine band: |phase| <= 1.5*dur from mid-transit (no in-transit cadence)
 NEAR_FACTOR_IMPUTED = 2.0  # wider band when the TOI duration was imputed with the population median
 FLUX_CHECK_PER_SPLIT = 50  # segments per split re-verified against the packed .dat (exact float32)
+
+DISP_PRIORITY = {"CP": 0, "KP": 1, "PC": 2, "APC": 3}  # lower = higher confidence
+
+
+def _best_disp(disps: list[str]) -> str:
+    """Highest-confidence disposition (CP>KP>PC>APC) present in `disps`; '' if none."""
+    ds = [d for d in disps if d in DISP_PRIORITY]
+    return min(ds, key=lambda d: DISP_PRIORITY[d]) if ds else ""
+
+
+def annotate_segment(
+    times: np.ndarray, toi_rows: list[tuple[float, float, float, str]], median_dur: float, near_factor: float
+) -> tuple[list[str], list[str], list[str], np.ndarray]:
+    """Per-window (full_best, part_best, near_best, n_intransit_cad) for one segment.
+
+    `times` is (n_win, window) BTJD, in packed row order. Each TOI is classified per window into its
+    STRONGEST overlap kind and contributes its disposition to that bucket:
+      full    -> a whole transit interval [mid-0.5d, mid+0.5d] lies inside the window's [t0, t_last]
+                 (requires a KNOWN duration; an imputed dur can never mint a `full`, per Q3a)
+      partial -> >=1 in-transit cadence (|phase| <= 0.5d) but not fully contained (window-edge clip)
+      near    -> a cadence within near_factor*d of mid-transit but none in-transit (buffer only)
+    `*_best` = the best disposition among the TOIs that landed in that bucket ('' if empty). A window
+    with no bucket for any TOI is a clean negative; the caller flags unfoldable stars separately.
+    """
+    n_win = times.shape[0]
+    t = times.astype(np.float64)              # (n_win, window)
+    t0 = t[:, 0]                              # (n_win,) window start time
+    tL = t[:, -1]                            # (n_win,) window end time
+    full: list[list[str]] = [[] for _ in range(n_win)]
+    part: list[list[str]] = [[] for _ in range(n_win)]
+    near: list[list[str]] = [[] for _ in range(n_win)]
+    n_in = np.zeros(n_win, dtype=int)
+    for (P, T0, dur, disp) in toi_rows:
+        d_known = np.isfinite(dur)
+        d = dur if d_known else median_dur
+        phase = np.mod(t - T0 + 0.5 * P, P) - 0.5 * P     # (n_win, window) days from nearest mid
+        in_cad = np.abs(phase) <= 0.5 * d                  # (n_win, window)
+        has_in = in_cad.any(axis=1)                        # (n_win,)
+        has_near = (np.abs(phase) <= near_factor * d).any(axis=1)
+        n_in += in_cad.sum(axis=1)
+        if d_known:  # full containment: exists a transit mid with the whole interval inside [t0, tL]
+            k_lo = np.floor((t0 - T0) / P).astype(int) - 1
+            k_hi = np.ceil((tL - T0) / P).astype(int) + 1
+            is_full = np.zeros(n_win, dtype=bool)
+            for w in range(n_win):
+                for k in range(int(k_lo[w]), int(k_hi[w]) + 1):
+                    mid = T0 + k * P
+                    if mid - 0.5 * d >= t0[w] and mid + 0.5 * d <= tL[w]:
+                        is_full[w] = True
+                        break
+        else:
+            is_full = np.zeros(n_win, dtype=bool)
+        for w in range(n_win):
+            if is_full[w]:
+                full[w].append(disp)
+            elif has_in[w]:
+                part[w].append(disp)
+            elif has_near[w]:
+                near[w].append(disp)
+    return ([_best_disp(x) for x in full], [_best_disp(x) for x in part],
+            [_best_disp(x) for x in near], n_in)
+
+
+def build_annotations(root: Path, packed: Path, seq_dir: Path, labels_csv: Path, nasa_csv: Path,
+                      out_path: Path, whitelist: set[str], limit: int | None, logger) -> int:
+    """Emit the rich per-window annotation parquet (full_best/part_best/near_best/n_intransit_cad/
+    unfoldable) over the full `whitelist`. No 0/1/-1 label is baked here: the notebook derives it per
+    knob (disposition subset x include-partial). Reuses the label path's verified alignment + exact
+    float32 flux re-check so the annotation rows map to the same packed windows."""
+    manifest = json.loads((packed / "pack_manifest.json").read_text())
+    window = int(manifest["window"])
+    max_absmax = float(manifest["max_absmax"])
+    logger.info(f"packed: {packed} (window={window}, max_absmax={max_absmax}); whitelist={sorted(whitelist)}")
+
+    eph = load_ephemerides_with_disp(nasa_csv, logger, whitelist)
+    median_dur = _median_duration(eph)
+    logger.info(f"population median transit duration = {median_dur * 24:.2f} h")
+
+    labels = pd.read_csv(labels_csv)
+    labels["transit"] = pd.to_numeric(labels["transit"], errors="coerce").fillna(0).astype(int)
+    transit_tics = set(labels.loc[labels["transit"] == 1, "tic_id"].astype(int))
+    logger.info(f"v1 transit-positive TICs: {len(transit_tics)}")
+
+    from tqdm.auto import tqdm
+
+    npz_index = index_npz_by_segment(seq_dir, transit_tics, logger)
+    rng = np.random.default_rng(0)  # script (not a plot cell): deterministic spot-check sample
+    records: list[dict] = []
+    n_flux_checked = n_unfoldable_stars = 0
+    for split in ["train", "val", "test"]:
+        index = pd.read_parquet(packed / f"{split}_index.parquet")
+        total = int(index["n_win"].sum())
+        dat = np.memmap(packed / f"{split}_windows.dat", dtype=np.float32, mode="r", shape=(total, window))
+        seg_rows = index[index["tic_id"].isin(transit_tics)].reset_index(drop=True)
+        if limit:
+            keep_tics = sorted(seg_rows["tic_id"].unique())[:limit]
+            seg_rows = seg_rows[seg_rows["tic_id"].isin(keep_tics)].reset_index(drop=True)
+        check_ids = set(rng.choice(len(seg_rows), size=min(FLUX_CHECK_PER_SPLIT, len(seg_rows)),
+                                   replace=False).tolist()) if len(seg_rows) else set()
+        seen_unfoldable: set[int] = set()
+        for i, row in enumerate(tqdm(seg_rows.itertuples(index=False), desc=f"annot[{split}]", total=len(seg_rows))):
+            tic = int(row.tic_id)
+            toi_rows = eph.get(tic)
+            times, flux = replay_segment(
+                npz_path_for(npz_index, tic, int(row.sector), int(row.seg_idx)), window, max_absmax
+            )
+            assert times.shape[0] == int(row.n_win), (
+                f"{row.seg_id}: replay produced {times.shape[0]} windows, index says {row.n_win} — alignment broken"
+            )
+            if i in check_ids:  # exact-float32 re-verification of the row mapping against the memmap
+                packed_flux = np.array(dat[int(row.row_start): int(row.row_start) + int(row.n_win)])
+                assert np.array_equal(flux.astype(np.float32), packed_flux), (
+                    f"{row.seg_id}: replayed flux != packed rows — alignment broken"
+                )
+                n_flux_checked += 1
+
+            if toi_rows is None:  # transit star with no whitelisted ephemeris -> every window quarantined
+                if tic not in seen_unfoldable:
+                    seen_unfoldable.add(tic)
+                for j in range(int(row.n_win)):
+                    records.append({"split": split, "seg_id": row.seg_id, "tic_id": tic, "sector": int(row.sector),
+                                    "seg_idx": int(row.seg_idx), "row": int(row.row_start) + j, "win_in_seg": j,
+                                    "full_best": "", "part_best": "", "near_best": "", "n_intransit_cad": 0,
+                                    "unfoldable": True})
+                continue
+
+            dur_imputed = any(not np.isfinite(d) for (_, _, d, _) in toi_rows)
+            near_factor = NEAR_FACTOR_IMPUTED if dur_imputed else NEAR_FACTOR
+            full_b, part_b, near_b, n_in = annotate_segment(times, toi_rows, median_dur, near_factor)
+            for j in range(int(row.n_win)):
+                records.append({"split": split, "seg_id": row.seg_id, "tic_id": tic, "sector": int(row.sector),
+                                "seg_idx": int(row.seg_idx), "row": int(row.row_start) + j, "win_in_seg": j,
+                                "full_best": full_b[j], "part_best": part_b[j], "near_best": near_b[j],
+                                "n_intransit_cad": int(n_in[j]), "unfoldable": False})
+        n_unfoldable_stars += len(seen_unfoldable)
+
+    df = pd.DataFrame(records)
+    for c in ("full_best", "part_best", "near_best"):
+        df[c] = df[c].astype("string").fillna("")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(out_path, index=False)
+    logger.info(f"wrote {out_path} ({len(df)} window rows)")
+
+    # what-if counters (stored user rule): positive-label size at every knob, visible not silent.
+    logger.info("=" * 68)
+    logger.info("Window annotation counters (knob = disposition subset x include-partial)")
+    logger.info("=" * 68)
+    logger.info(f"flux spot-checks passed: {n_flux_checked} segments (exact float32 vs .dat)")
+    logger.info(f"annotated windows:       {len(df)}")
+    logger.info(f"unfoldable transit stars (no whitelisted eph): {n_unfoldable_stars}")
+    has_overlap = (df["full_best"] != "") | (df["part_best"] != "") | (df["near_best"] != "") | df["unfoldable"]
+    logger.info(f"clean-negative windows (no overlap, any knob): {int((~has_overlap).sum())}")
+    for name, ds, part in (("KP+CP", {"CP", "KP"}, False), ("KP+CP +part", {"CP", "KP"}, True),
+                           ("KP+CP+PC", {"CP", "KP", "PC"}, False), ("KP+CP+PC +part", {"CP", "KP", "PC"}, True)):
+        pos = df["full_best"].isin(ds) | (part & df["part_best"].isin(ds))
+        n_star = df.loc[pos, "tic_id"].nunique()
+        logger.info(f"  knob {name:<16} transit=1 windows: {int(pos.sum()):>6}  over {n_star} stars")
+    logger.info("Annotation build done.")
+    return 0
 
 
 def masks_for_times(
@@ -115,7 +274,13 @@ def main() -> int:
     ap.add_argument("--sequences-dir", default=None, help="Default: processed/sequences")
     ap.add_argument("--labels-csv", default=None, help="Default: labels/variability_labels_star.csv (v1)")
     ap.add_argument("--nasa-csv", default=None, help="Default: labels/qc/toi_nasa.csv")
-    ap.add_argument("--out", default=None, help="Default: labels/qc/transit_window_labels_w256.parquet")
+    ap.add_argument("--out", default=None, help="Default depends on --emit (see below)")
+    ap.add_argument("--emit", choices=["label", "annot"], default="label",
+                    help="'label' = the baked 1/0/-1 parquet (default); 'annot' = rich per-window "
+                         "disposition annotation, label derived per knob in the notebook.")
+    ap.add_argument("--whitelist", default="CP,KP,PC,APC",
+                    help="Comma-separated TFOPWG dispositions folded in --emit annot (default all four; "
+                         "the notebook selects subsets, so keep this full unless deliberately narrowing).")
     args = ap.parse_args()
 
     root = find_project_root()
@@ -123,8 +288,15 @@ def main() -> int:
     seq_dir = Path(args.sequences_dir) if args.sequences_dir else root / "processed" / "sequences"
     labels_csv = Path(args.labels_csv) if args.labels_csv else root / "labels" / "variability_labels_star.csv"
     nasa_csv = Path(args.nasa_csv) if args.nasa_csv else root / "labels" / "qc" / "toi_nasa.csv"
-    out_path = Path(args.out) if args.out else root / "labels" / "qc" / "transit_window_labels_w256.parquet"
     logger = setup_logging(root / "qc_transit_window_labels.log", "transit_window_labels")
+
+    if args.emit == "annot":
+        out_path = Path(args.out) if args.out else root / "labels" / "qc" / "transit_window_labels_w256_annot.parquet"
+        whitelist = {d.strip().upper() for d in args.whitelist.split(",") if d.strip()}
+        assert nasa_csv.exists(), f"missing {nasa_csv}; run src/qc/fetch_toi_enriched.py first"
+        return build_annotations(root, packed, seq_dir, labels_csv, nasa_csv, out_path, whitelist, args.limit, logger)
+
+    out_path = Path(args.out) if args.out else root / "labels" / "qc" / "transit_window_labels_w256.parquet"
 
     manifest = json.loads((packed / "pack_manifest.json").read_text())
     window = int(manifest["window"])

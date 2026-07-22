@@ -376,7 +376,7 @@ def _make_untrained(enc_channels: list[int], kernel_size: int, z_dim: int, windo
 def run_suite(
     exp_name: str, tasks: tuple[str, ...] = TASKS_DEFAULT, b1_seeds: tuple[int, ...] = B1_SEEDS_DEFAULT,
     variant: str = "B", seed: int = 0, n_boot: int = 2000, device: str | None = None,
-    root: Path = REPO_ROOT, write: bool = True,
+    root: Path = REPO_ROOT, write: bool = True, ckpt_stem: str = "best",
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Run the full skyline suite at one experiment config and return (summary, gate) frames.
@@ -392,7 +392,7 @@ def run_suite(
     subset = pd.read_parquet(root / "processed" / "subset" / "subset_tics.parquet")
 
     ckpt = torch.load(
-        exp_dir / "models" / f"{variant}_seed{seed}" / "best.pt", map_location=device, weights_only=False
+        exp_dir / "models" / f"{variant}_seed{seed}" / f"{ckpt_stem}.pt", map_location=device, weights_only=False
     )
     cfg = ckpt["cfg"]
     window = int(cfg["data"]["window"])
@@ -516,6 +516,7 @@ def run_suite(
         stamped["exp_name"] = exp_name
         stamped["variant"] = variant
         stamped["seed"] = seed
+        stamped["ckpt"] = ckpt_stem
         append_results(results_path, stamped)
         gate.to_csv(exp_dir / "results" / "skyline_gate.csv", index=False)
     return summary, gate
@@ -527,8 +528,10 @@ def main(cfg: DictConfig) -> None:
     # +skyline_b1_seeds=[] skips the objective-independent B1 during the exp02 sweep.
     tasks = tuple(cfg.get("skyline_tasks", TASKS_DEFAULT))
     b1_seeds = tuple(cfg.get("skyline_b1_seeds", B1_SEEDS_DEFAULT))
+    ckpt_stem = str(cfg.get("skyline_ckpt", "best"))  # +skyline_ckpt=best_recon_aux for the exp04 gate
     summary, gate = run_suite(
-        cfg.exp_name, tasks=tasks, b1_seeds=b1_seeds, variant=cfg.variant_name, seed=int(cfg.seed)
+        cfg.exp_name, tasks=tasks, b1_seeds=b1_seeds, variant=cfg.variant_name, seed=int(cfg.seed),
+        ckpt_stem=ckpt_stem,
     )
     log.info(f"skyline summary:\n{summary}")
     log.info(f"skyline gate:\n{gate}")

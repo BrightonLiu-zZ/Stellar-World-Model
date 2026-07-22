@@ -1,0 +1,54 @@
+# @package _global_
+# exp04 encoder variant: kernel_size 5 -> 9 (H-receptive, tier 2). Wider conv kernels grow the
+# receptive field toward the hours-long transit/eclipse morphology.
+# Full standalone copy of exp04/base.yaml with only the VARIANT line(s) changed; diff against
+# base.yaml to review. Run: python -m swm.train +experiment=exp04/enc_k9 variant=B seed=<S>
+
+exp_name: exp04_enc_k9
+
+data:
+  seq_len: 16 # windows per training sequence (exp01 geometry, locked for exp03/04 comparability)
+  window: 256 # cadences per window (exp01 geometry; packed reused via junction to exp01 packed)
+  n_quiet: 10000 # unchanged default; subset is shared at processed/subset (never rebuilt per experiment)
+  val_frac: 0.15 # unchanged default; star-disjoint split
+  test_frac: 0.15 # unchanged default
+  max_absmax: 20.0 # unchanged default; pack-time guard (packed is reused, so pack-side knobs are inert here)
+  num_workers: 0 # unchanged default; Windows-spawn-safe
+  pack_workers: 8 # unchanged default; inert (no packing in exp04)
+  batch_size: 256 # unchanged default; 1.6 GB peak on the 4060 at window 1024, smaller at 256
+  limit: null # full data
+
+model:
+  z_dim: 128 # latent dim (v1 default; enc_z64/enc_z32/enc_z64k9 vary this)
+  in_ch: 1 # single flux channel
+  enc_channels: [32, 64, 128, 256] # 4 conv stages, each halves length: 256 -> 16 bottleneck
+  kernel_size: 9 # VARIANT: widened from 5 (H-receptive)
+  gru_hidden: 256 # dynamics GRU hidden size (not varied in exp04; dyn term <0.5% of loss)
+  gru_layers: 1 # not varied in exp04
+
+train:
+  lambda_dyn: 1.0 # written for completeness; variant=B sets the same value
+  beta_target: 0.1 # WINNER KL recipe (exp03): low prior pressure keeps the floor live
+  beta_warmup_epochs: 10 # linear 0 -> beta_target; exp03 forensic H1: warmup axis is second-order, hold 10
+  free_bits: 0.02 # WINNER: floor 2.56 nats sits just below true KL ~3 -> beta exerts live gradient
+  lr: 0.0003 # unchanged default
+  max_epochs: 60 # exp03 protocol; best_recon_aux selects at median epoch 56, so 40 would truncate
+  patience: 10 # on BOTH tracked bests (stop only when neither improves)
+  grad_clip: 1.0 # unchanged default (GRU stability)
+  amp: true # unchanged default; mixed precision
+  accum_steps: 1 # unchanged default
+  active_unit_kl_threshold: 0.01 # unchanged default; diagnostics only
+  resume: true # interrupt/resume-safe overnight runner: Ctrl-C anytime, re-run resumes from last.pt
+  track_recon_aux_best: true # dual checkpoint (best.pt legacy monitor + best_recon_aux.pt KL-free)
+  recon_aux:
+    type: log_psd # WINNER objective family: log-PSD auxiliary
+    weight: 0.1 # WINNER weight; exp03 found the wide weight bracket is not the bottleneck
+    psd_normalize: false # amplitude-retaining raw power (lpsd_amp, the winning form)
+    psd_eps: 1.0e-8 # unchanged default; floor inside log(power + eps)
+    hf_weight: 1.0 # combined-objective only; inert for type=log_psd
+    mask_frac: 0.0 # masked-objective only; inert
+    mask_span: 8 # masked-objective only; inert
+  wandb:
+    mode: online # overnight runs report to W&B online (user terminal); smokes override to disabled
+    project: stellar-world-model
+    entity: null # default entity from `wandb login`

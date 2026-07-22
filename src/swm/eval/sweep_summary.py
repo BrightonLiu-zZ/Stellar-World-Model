@@ -84,13 +84,11 @@ def summarize(root: Path = REPO_ROOT) -> tuple[pd.DataFrame, pd.DataFrame]:
     return ranked, long
 
 
-def summarize_readout_sweep(root: Path, exp_glob: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_readout_long(root: Path, exp_glob: str) -> pd.DataFrame:
     """
-    Aggregate the exp03 readout_sweep.csv files into the two decision tables of plan 2026-07-13.
-    Ranked table: one row per (exp_name, ckpt, readout, pooling) cell with its mean trained-untrained
-    gap over GATE_TASKS (the shared-encoder, pretrain-once column) plus per-task gaps. Per-task-best
-    table: for each task, the single best cell across the whole sweep (the per-task-encoder upper-bound
-    row the open framing fork asks to carry). Returns (ranked_cells, per_task_best).
+    Concatenate every experiment's readout_sweep.csv, deduped to the latest row per
+    (exp, ckpt, pooling, readout, task, labels_version) cell. Pre-Phase-2 rows have no
+    labels_version column; they are all v1 by construction (schema migration on read).
     """
     parts = []
     for exp_dir in sorted((root / "experiments").glob(exp_glob)):
@@ -98,9 +96,28 @@ def summarize_readout_sweep(root: Path, exp_glob: str) -> tuple[pd.DataFrame, pd
         if not sweep_path.exists():
             continue
         frame = pd.read_csv(sweep_path)
-        parts.append(frame.drop_duplicates(subset=["exp_name", "ckpt", "pooling", "readout", "task"], keep="last"))
+        if "labels_version" not in frame.columns:
+            frame["labels_version"] = "v1"
+        frame["labels_version"] = frame["labels_version"].fillna("v1")
+        parts.append(frame.drop_duplicates(
+            subset=["exp_name", "ckpt", "pooling", "readout", "task", "labels_version"], keep="last"))
     assert parts, f"no readout_sweep.csv under experiments/{exp_glob}"
-    long = pd.concat(parts, ignore_index=True)
+    return pd.concat(parts, ignore_index=True)
+
+
+def summarize_readout_sweep(root: Path, exp_glob: str,
+                            labels_version: str = "v1") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Aggregate the exp03 readout_sweep.csv files into the two decision tables of plan 2026-07-13.
+    Ranked table: one row per (exp_name, ckpt, readout, pooling) cell with its mean trained-untrained
+    gap over GATE_TASKS (the shared-encoder, pretrain-once column) plus per-task gaps. Per-task-best
+    table: for each task, the single best cell across the whole sweep (the per-task-encoder upper-bound
+    row the open framing fork asks to carry). Only rows of one labels_version are ranked at a time so
+    v2 re-scores never shadow the v1 reference. Returns (ranked_cells, per_task_best).
+    """
+    long = load_readout_long(root, exp_glob)
+    long = long[long["labels_version"] == labels_version]
+    assert len(long) > 0, f"no readout rows with labels_version={labels_version}"
 
     cell_rows = []
     cell_keys = ["exp_name", "ckpt", "readout", "pooling"]
@@ -128,17 +145,52 @@ def summarize_readout_sweep(root: Path, exp_glob: str) -> tuple[pd.DataFrame, pd
     return ranked, per_task_best
 
 
+def label_delta(root: Path, exp_glob: str, version: str = "v2") -> pd.DataFrame:
+    """
+    Phase-2 delta table (roadmap 2026-07-14): pair every (exp, ckpt, readout, pooling, task) cell
+    scored under both v1 and `version` and report pr_auc / gap / positive-count deltas. Unpaired cells
+    are dropped (mirror mode should leave none) with a logged count, never silently.
+    """
+    long = load_readout_long(root, exp_glob)
+    keys = ["exp_name", "ckpt", "readout", "pooling", "task"]
+    keep = keys + ["pr_auc", "pr_auc_untrained", "gap", "n_test_pos", "base_rate"]
+    v1 = long.loc[long["labels_version"] == "v1", keep]
+    v2 = long.loc[long["labels_version"] == version, keep]
+    assert len(v2) > 0, f"no readout rows with labels_version={version}; run the mirror sweep first"
+    paired = v1.merge(v2, on=keys, suffixes=("_v1", f"_{version}"))
+    n_unpaired = max(len(v1), len(v2)) - len(paired)
+    if n_unpaired:
+        log.warning(f"{n_unpaired} cells lack a v1<->{version} pair and were dropped from the delta table")
+    paired["delta_pr_auc"] = paired[f"pr_auc_{version}"] - paired["pr_auc_v1"]
+    paired["delta_gap"] = paired[f"gap_{version}"] - paired["gap_v1"]
+    paired["delta_n_test_pos"] = paired[f"n_test_pos_{version}"] - paired["n_test_pos_v1"]
+    return paired.sort_values(["task", "delta_pr_auc"], ascending=[True, False]).reset_index(drop=True)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="Aggregate an objective/readout sweep")
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
-    parser.add_argument("--mode", choices=["gate", "readout"], default="gate",
-                        help="gate = exp02 skyline_gate ranking (default); readout = exp03 readout_sweep ranking")
+    parser.add_argument("--mode", choices=["gate", "readout", "label-delta"], default="gate",
+                        help="gate = exp02 skyline_gate ranking (default); readout = exp03 readout_sweep "
+                             "ranking; label-delta = Phase-2 paired v1-vs-v2 per-cell delta")
     parser.add_argument("--exp-glob", default="exp03_*", help="readout mode: experiments/ glob to aggregate")
+    parser.add_argument("--labels-version", default="v1", help="readout mode: which labels_version to rank")
     args = parser.parse_args()
 
+    if args.mode == "label-delta":
+        paired = label_delta(args.root, args.exp_glob, version="v2")
+        out_path = args.root / "experiments" / "exp03_label_delta_v2.csv"
+        paired.to_csv(out_path, index=False)
+        log.info(f"wrote {out_path} ({len(paired)} paired cells)")
+        rollup = paired.groupby("task")["delta_pr_auc"].agg(["count", "mean", "median",
+                                                             lambda s: float((s > 0).mean())])
+        rollup.columns = ["n_cells", "mean_delta", "median_delta", "frac_improved"]
+        log.info(f"per-task delta rollup (pr_auc, v2 minus v1):\n{rollup.round(4)}")
+        return
+
     if args.mode == "readout":
-        ranked, per_task_best = summarize_readout_sweep(args.root, args.exp_glob)
+        ranked, per_task_best = summarize_readout_sweep(args.root, args.exp_glob, args.labels_version)
         out_path = args.root / "experiments" / "exp03_sweep_summary.csv"
         ranked.to_csv(out_path, index=False)
         best_path = args.root / "experiments" / "exp03_per_task_best.csv"

@@ -236,6 +236,7 @@ def build_model_from_ckpt(ckpt: dict, device: str) -> tuple[WorldModel, dict]:
         in_ch=1, enc_channels=list(mc["enc_channels"]), kernel_size=int(mc["kernel_size"]),
         z_dim=int(mc["z_dim"]), window=int(cfg["data"]["window"]),
         gru_hidden=int(mc["gru_hidden"]), gru_layers=int(mc["gru_layers"]),
+        dyn_mode=str(mc.get("dyn_mode", "fwd")), # exp05 fwd_bwd ckpts carry dynamics_bwd.* -> needed for strict load
     ).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()

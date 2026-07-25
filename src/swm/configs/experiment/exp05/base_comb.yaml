@@ -1,0 +1,68 @@
+# @package _global_
+# exp05 base -- COMB recipe (exp04 reference: fb0 / beta0.1 / combined psd+hf aux) at the exp01
+# geometry (window 256 / seq_len 16), every knob written out so the run is checkable in one file
+# (exp04 convention). The dynamics-axis cells override ONLY model.dyn_mode + train.lambda_dyn + exp_name
+# on the CLI (see experiments/run_exp05_train_sweep.ps1):
+#   python -m swm.train +experiment=exp05/base_comb exp_name=exp05_comb_<cell> variant=B seed=<S> \
+#       model.dyn_mode=<fwd|fwd_bwd|multistep> train.lambda_dyn=<lambda>
+# lambda values come from the pre-launch smoke (lambda = target_contribution * recon(~0.85) / dyn_mode).
+# PACKED: paths.packed_dir resolves to experiments/${exp_name}/packed, and the SWEEP RUNNER is what creates
+# that junction to the shared exp01 packed windows. Running a cell STAND-ALONE (e.g. a calibration smoke
+# under a throwaway exp_name) must therefore add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+# otherwise SeqWindowDataset asserts "missing .../packed/train_index.parquet".
+# variant=B sets variant_name=B (train.lambda_dyn is overridden per cell here, not by the variant group).
+# Locked defaults configs/{data,train,model}/default.yaml are NOT edited.
+
+exp_name: exp05_comb_base # placeholder; every run overrides exp_name on the CLI
+
+data:
+  seq_len: 16 # exp01 geometry (locked for exp03/04/05 comparability); rollout horizon = seq_len-1 = 15
+  window: 256 # cadences per window; packed reused via junction to exp01_window256_seq16/packed
+  n_quiet: 10000 # shared subset at processed/subset (never rebuilt per experiment)
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0 # pack-time guard (inert; packed is reused)
+  num_workers: 0 # Windows-spawn-safe
+  pack_workers: 8 # inert (no packing)
+  batch_size: 256
+  limit: null
+
+model:
+  z_dim: 128 # v1 latent dim
+  in_ch: 1
+  enc_channels: [32, 64, 128, 256]
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd # DEFAULT; the dynamics-axis cells override to fwd_bwd / multistep on the CLI
+
+train:
+  lambda_dyn: 1.0 # placeholder; every cell overrides this on the CLI (target-contribution calibrated)
+  beta_target: 0.1 # comb recipe: low prior pressure
+  beta_warmup_epochs: 10
+  free_bits: 0.0 # COMB: no per-dim KL floor (fb0)
+  lr: 0.0003
+  lr_schedule: cosine # exp05: cosine LR decay over max_epochs (fixes the constant-lr val sawtooth)
+  lr_min: 3.0e-6 # cosine eta_min floor
+  max_epochs: 60
+  patience: 10 # on BOTH tracked bests
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true # overnight resume-safe (Ctrl-C anytime; re-run resumes from last.pt)
+  track_recon_aux_best: true # dual checkpoint; eval consumes best_recon_aux.pt
+  select_include_dyn: false # exp05: select mu lambda-independently (apples-to-apples across the dynamics axis)
+  recon_aux:
+    type: combined # COMB objective: log-PSD + hf_weight * hf_time
+    weight: 0.3 # exp04 reference comb weight
+    psd_normalize: false # amplitude-retaining raw power
+    psd_eps: 1.0e-8
+    hf_weight: 1.0 # combined: hf_time sub-term weight
+    mask_frac: 0.0
+    mask_span: 8
+  wandb:
+    mode: online # overnight runs report to W&B online (user terminal); smokes override to disabled
+    project: stellar-world-model
+    entity: null

@@ -1,0 +1,63 @@
+# @package _global_
+# exp05 base -- LPSD hedge recipe (exp03 winner: fb0.02 / beta0.1 / log_psd aux) at the exp01 geometry
+# (window 256 / seq_len 16). Full standalone copy of base_comb.yaml with only the recipe knobs changed
+# (free_bits, recon_aux.type/weight) -- diff against base_comb.yaml to review. The lpsd hedge tests
+# whether the dynamics effect generalizes beyond the comb recipe; only 2 cells use it (off + multistep@1.0).
+#   python -m swm.train +experiment=exp05/base_lpsd exp_name=exp05_lpsd_<cell> variant=B seed=<S> \
+#       model.dyn_mode=<fwd|multistep> train.lambda_dyn=<lambda>
+# PACKED: paths.packed_dir resolves to experiments/${exp_name}/packed, and the SWEEP RUNNER creates that
+# junction. A STAND-ALONE run (e.g. calibration smoke) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+
+exp_name: exp05_lpsd_base # placeholder; every run overrides exp_name on the CLI
+
+data:
+  seq_len: 16 # exp01 geometry; rollout horizon = seq_len-1 = 15
+  window: 256
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels: [32, 64, 128, 256]
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd # DEFAULT; overridden to multistep on the CLI for the hedge treatment cell
+
+train:
+  lambda_dyn: 1.0 # placeholder; overridden per cell on the CLI
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.02 # LPSD: per-dim KL floor 0.02 (vs comb's 0.0)
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-6
+  max_epochs: 60
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: log_psd # LPSD objective: log-PSD only
+    weight: 0.1 # exp03 winner lpsd weight
+    psd_normalize: false
+    psd_eps: 1.0e-8
+    hf_weight: 1.0 # inert for type=log_psd
+    mask_frac: 0.0
+    mask_span: 8
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

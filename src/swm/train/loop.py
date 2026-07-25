@@ -36,6 +36,7 @@ def build_model(cfg: DictConfig, device: str) -> WorldModel:
         window=cfg.data.window,
         gru_hidden=cfg.model.gru_hidden,
         gru_layers=cfg.model.gru_layers,
+        dyn_mode=cfg.model.get("dyn_mode", "fwd"), # exp05 fwd/fwd_bwd toggle; .get keeps pre-exp05 configs valid
     )
     return model.to(device)
 
@@ -101,7 +102,7 @@ def run_epoch(
     aux_cfg = cfg.train.recon_aux
     aux_weight = float(aux_cfg.weight)
     window = int(cfg.data.window)
-    sums = {"recon": 0.0, "aux": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "total": 0.0}
+    sums = {"recon": 0.0, "aux": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "mu_var": 0.0, "total": 0.0}
     kl_dim_sum = torch.zeros(cfg.model.z_dim)
     n_batches = 0
 
@@ -119,7 +120,12 @@ def run_epoch(
                 out = model(x_in)
                 rl = recon_loss(out["recon"], x) # always reconstruct the CLEAN window
                 kl_loss, kl_total, kl_dim = kl_free_bits(out["mu_seq"], out["logvar_seq"], cfg.train.free_bits)
-                dl = dynamics_loss(out["pred_next"], out["target_next"])
+                if "pred_roll" in out: # multistep mode: the optimized dyn term is the free-running rollout MSE
+                    dl = dynamics_loss(out["pred_roll"], out["target_roll"])
+                else:
+                    dl = dynamics_loss(out["pred_next"], out["target_next"])
+                    if "pred_prev" in out: # fwd_bwd mode adds the reverse-time term under the same lambda (sum)
+                        dl = dl + dynamics_loss(out["pred_prev"], out["target_prev"])
                 al = additive_aux_loss(out["recon"], x, aux_cfg)
                 loss = rl + aux_weight * al + beta * kl_loss + cfg.train.lambda_dyn * dl
             if train:
@@ -135,6 +141,7 @@ def run_epoch(
             sums["kl_total"] += float(kl_total)
             sums["kl_loss"] += float(kl_loss)
             sums["dyn"] += float(dl)
+            sums["mu_var"] += float(out["mu_seq"].detach().float().var()) # latent scale; collapse monitor (exp05 high-lambda)
             sums["total"] += float(loss)
             kl_dim_sum += kl_dim.detach().float().cpu()
             n_batches += 1
@@ -149,7 +156,7 @@ def run_epoch(
 
 def save_checkpoint(
     path: Path, model: WorldModel, optimizer, scaler, epoch: int, best_val: float, cfg: DictConfig,
-    best_select: float | None = None,
+    best_select: float | None = None, scheduler=None,
 ) -> None:
     """Persist model, optimizer, AMP scaler, epoch, best val(s), and RNG state so a run resumes bit-identically."""
     torch.save(
@@ -157,6 +164,7 @@ def save_checkpoint(
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "scaler": scaler.state_dict(),
+            "scheduler": scheduler.state_dict() if scheduler is not None else None, # cosine LR state (exp05); None pre-exp05
             "epoch": epoch,
             "best_val": best_val,
             "best_select": best_select, # best KL-free selection value (dual-checkpoint tracking); None pre-exp03
@@ -206,6 +214,13 @@ def train(cfg: DictConfig) -> None:
 
     model = build_model(cfg, device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train.lr)
+    # Optional cosine LR decay (exp05): smooths the constant-lr val sawtooth seen through exp04, giving a
+    # cleaner post-warmup checkpoint minimum. lr_schedule=none (default) reproduces exp00-04's fixed lr.
+    scheduler = None
+    if str(cfg.train.get("lr_schedule", "none")) == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=int(cfg.train.max_epochs), eta_min=float(cfg.train.get("lr_min", 3.0e-6))
+        )
     scaler = GradScaler("cuda", enabled=bool(cfg.train.amp))
     train_loader = make_loader(cfg, "train", randomize=True, shuffle=True)
     val_loader = make_loader(cfg, "val", randomize=False, shuffle=False)
@@ -219,6 +234,8 @@ def train(cfg: DictConfig) -> None:
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scaler.load_state_dict(ckpt["scaler"])
+        if scheduler is not None and ckpt.get("scheduler") is not None: # restore cosine phase for bit-identical resume
+            scheduler.load_state_dict(ckpt["scheduler"])
         # RNG states must be CPU ByteTensors; map_location=device moved them to the GPU, so pull them back.
         torch.set_rng_state(ckpt["torch_rng"].cpu())
         torch.cuda.set_rng_state_all([state.cpu() for state in ckpt["cuda_rng"]])
@@ -247,12 +264,18 @@ def train(cfg: DictConfig) -> None:
             + float(cfg.train.beta_target) * va["kl_loss"] + float(cfg.train.lambda_dyn) * va["dyn"]
         )
         # KL-free selection metric for the dual checkpoint: the same fit terms minus the clamp-saturated
-        # KL noise that dominates val_monitor (exp03 forensic H2/H3).
+        # KL noise that dominates val_monitor (exp03 forensic H2/H3). The dyn term is included by default
+        # (exp00-04), but exp05 sets select_include_dyn=false so mu is selected lambda-independently and the
+        # dynamics-axis comparison is apples-to-apples (a high-lambda dyn term would otherwise dominate the
+        # selection and pick a dynamics-fit checkpoint rather than the best representation).
+        include_dyn = bool(cfg.train.get("select_include_dyn", True))
         val_select = (
-            va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"] + float(cfg.train.lambda_dyn) * va["dyn"]
+            va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"]
+            + (float(cfg.train.lambda_dyn) * va["dyn"] if include_dyn else 0.0)
         )
 
-        record = {"epoch": epoch, "beta": beta, "lr": cfg.train.lr, "val/monitor": val_monitor,
+        cur_lr = optimizer.param_groups[0]["lr"] # live lr (tracks the cosine schedule when enabled)
+        record = {"epoch": epoch, "beta": beta, "lr": cur_lr, "val/monitor": val_monitor,
                   "val/monitor_recon_aux": val_select}
         for key, value in tr.items():
             record[f"train/{key}"] = value
@@ -265,6 +288,12 @@ def train(cfg: DictConfig) -> None:
             f"val recon {va['recon']} aux {va['aux']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
         )
 
+        # Advance the LR schedule BEFORE checkpointing so the stored scheduler state matches the lr the
+        # NEXT epoch will use -- keeps resume bit-identical (no-op when scheduler is None). cur_lr above
+        # already captured the lr actually used this epoch, so logging is unaffected.
+        if scheduler is not None:
+            scheduler.step()
+
         improved_monitor = epoch >= warmup and val_monitor < best_val # only steady-beta epochs are eligible as best
         improved_select = track_select and epoch >= warmup and val_select < best_select
         if improved_monitor:
@@ -273,11 +302,11 @@ def train(cfg: DictConfig) -> None:
             best_select = val_select
         # last.pt is written AFTER the best-value updates so a crash-resume sees the true bests (the old
         # order stored pre-update values, letting a resumed run overwrite best.pt with a worse epoch).
-        save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+        save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
         if improved_monitor:
-            save_checkpoint(best_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+            save_checkpoint(best_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
         if improved_select:
-            save_checkpoint(best_select_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select)
+            save_checkpoint(best_select_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
         if epoch >= warmup:
             # With dual tracking, patience resets while EITHER best improves; stopping on the monitor alone
             # would kill the run on KL noise while the KL-free metric is still improving.

@@ -4,3 +4,4 @@ enc_channels: [32, 64, 128, 256] # 4 conv stages, each halves length via MaxPool
 kernel_size: 5
 gru_hidden: 256 # dynamics GRU hidden size
 gru_layers: 1
+dyn_mode: fwd # latent-dynamics objective (exp05): fwd = one-step forward only (exp00-04, default); fwd_bwd = also predict the time-reversed sequence via a separate backward GRU. fwd keeps the state_dict tree exp04-identical (strict-load reuse).

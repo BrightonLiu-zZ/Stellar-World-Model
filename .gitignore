@@ -22,7 +22,7 @@ results/
 experiments/**/packed/
 outputs/
 src/tests/
-models/
+experiments/**/models/
 src/legacy/
 tmp/
 experiments/exp03_forensics/

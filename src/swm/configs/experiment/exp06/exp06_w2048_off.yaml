@@ -1,0 +1,61 @@
+# @package _global_
+# GENERATED FROM experiments/configs/exp06_geometry_coverage.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
+# exp06_geometry_coverage cell exp06_w2048_off (recipe comb, geometry w2048)
+# packed: junction experiments/exp06_w2048_off/packed -> experiments/exp06_window2048_seq2/packed (the runner creates it).
+# Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp06_window2048_seq2/packed
+# seq_len=2 too short for a fair dynamics arm; median EB period 57h vs 68h window -> EB coverage >50%
+
+exp_name: exp06_w2048_off
+data:
+  seq_len: 2
+  window: 2048
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd
+train:
+  lambda_dyn: 0
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.0
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-06
+  max_epochs: 100
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: combined
+    weight: 0.3
+    psd_normalize: false
+    psd_eps: 1.0e-08
+    hf_weight: 1.0
+    mask_frac: 0.0
+    mask_span: 8
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

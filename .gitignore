@@ -1,6 +1,6 @@
-data/
+/data/
 processed/
-labels/
+/labels/
 .claude/
 CLAUDE.md
 docs/
@@ -29,3 +29,8 @@ experiments/exp03_forensics/
 experiments/exp03_eval_cache/
 experiments/exp04_eval_cache/
 experiments/**/*.npz
+
+# Generated tabular outputs (result tables, caches, profiles). Numbers live in W&B, the experiment
+# READMEs and docs/STATUS.md; the CSV/parquet themselves are regenerable from the analysis scripts.
+*.csv
+*.parquet

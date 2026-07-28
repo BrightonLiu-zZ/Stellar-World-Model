@@ -6,11 +6,17 @@ then encoded to posterior-mean mu by each requested arm. One .npz cache per arm,
 readout_sweep.cached_mu emits, so the scorecard reads it with no GPU pass. This is an encode pass, not
 training: no gradients, no W&B, safe as a backgrounded Claude Code job (CPU) or fast on a GPU terminal.
 
-Arms: the exp03 leader `fb0_b0p1_comb` best_recon_aux at 3 seeds + one capacity-matched untrained.
+Arms default to the exp03 leader `fb0_b0p1_comb` best_recon_aux at 3 seeds + one capacity-matched
+untrained. `--ckpt-dir` points the trained arms at any other cell's models/ dir; arm names carry their
+own seed (`seed2` or `<cell>_s2`) so several cells can share one cache directory without colliding.
 
 Run (swm env, from repo root, PYTHONPATH=src):
     python -m swm.eval.new_task_extract --limit 40           # smoke over the first 40 pool TICs
-    PYTHONUNBUFFERED=1 python -m swm.eval.new_task_extract    # full pool, all arms
+    PYTHONUNBUFFERED=1 python -m swm.eval.new_task_extract    # full pool, exp03 leader arms
+    # exp05 re-score (plan 2026-07-25), one invocation per cell into a shared out-dir:
+    PYTHONUNBUFFERED=1 python -m swm.eval.new_task_extract \
+        --ckpt-dir experiments/exp05_comb_off/models --arms comb_off_s0 comb_off_s1 comb_off_s2 comb_off_s3 \
+        --out-dir experiments/new_task_exp05/mu_cache
 """
 from __future__ import annotations
 
@@ -37,8 +43,18 @@ repo_root = Path(__file__).resolve().parents[3]
 _NPZ_RE = re.compile(r"^TIC(\d+)_s(\d+)_seg(\d+)_run\d+\.npz$")
 
 LEADER_DIR = repo_root / "experiments" / "exp03_fb0_b0p1_comb" / "models"
-SEEDS = (0, 1, 2)
 MAX_ABSMAX = 20.0  # exp01 pack_manifest guard: drop native windows whose |flux| exceeds this
+
+# Arm names carry their seed: legacy exp03 style `seed2`, or exp05 style `<cell>_s2`. One regex reads both,
+# so a cache directory can hold arms from several cells without the names colliding.
+_ARM_SEED_RE = re.compile(r"(?:^seed|_s)(\d+)$")
+
+
+def arm_seed(arm: str) -> int:
+    """Seed index encoded in an arm name (`seed2` -> 2, `comb_fbwd_c1p0_s2` -> 2)."""
+    match = _ARM_SEED_RE.search(arm)
+    assert match is not None, f"cannot read a seed index from arm name {arm!r} (want seed<N> or <cell>_s<N>)"
+    return int(match.group(1))
 
 
 def index_pool_npz(seq_dir: Path, pool_tics: set[int]) -> dict[int, tuple[int, int, Path]]:
@@ -111,11 +127,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Extract first-segment mu over the new-task pool.")
     ap.add_argument("--limit", type=int, default=None, help="Only the first N pool TICs per split (smoke).")
     ap.add_argument("--arms", nargs="+", default=["seed0", "seed1", "seed2", "untrained"],
-                    help="Subset of {seed0,seed1,seed2,untrained} to extract.")
+                    help="Arm names to extract: `untrained`, or any name ending seed<N> / _s<N>.")
+    ap.add_argument("--ckpt-dir", default=None,
+                    help="models/ dir holding B_seed<N>/best_recon_aux.pt. Default: the exp03 leader.")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--pool", default=None, help="Default: processed/subset/new_task_pool.parquet")
     ap.add_argument("--out-dir", default=None, help="Default: experiments/new_task/mu_cache")
     args = ap.parse_args()
+
+    ckpt_dir = Path(args.ckpt_dir) if args.ckpt_dir else LEADER_DIR
 
     seq_dir = repo_root / "processed" / "sequences"
     pool_path = Path(args.pool) if args.pool else repo_root / "processed" / "subset" / "new_task_pool.parquet"
@@ -131,8 +151,8 @@ def main() -> int:
     npz_index = index_pool_npz(seq_dir, set(pool["tic_id"].astype(int)))
     log.info(f"indexed first-segment npz for {len(npz_index)} pool TICs")
 
-    base = torch.load(LEADER_DIR / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
-    window = int(base["cfg"]["data"]["window"])  # all leader arms + untrained share the exp01 window (256)
+    base = torch.load(ckpt_dir / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
+    window = int(base["cfg"]["data"]["window"])  # all arms of one cell + untrained share the exp01 window (256)
     blocks_by_split = {}
     for split in ["train", "val", "test"]:
         blocks_by_split[split] = load_pool_blocks(seq_dir, pool, split, window, npz_index)  # read npz once, reuse
@@ -144,9 +164,7 @@ def main() -> int:
             model = _make_untrained(list(mc["enc_channels"]), int(mc["kernel_size"]), int(mc["z_dim"]),
                                     window, int(mc["gru_hidden"]), int(mc["gru_layers"]), args.device)
         else:
-            seed = int(arm.replace("seed", ""))
-            assert seed in SEEDS, f"unknown seed arm {arm}"
-            ck = torch.load(LEADER_DIR / f"B_seed{seed}" / "best_recon_aux.pt", map_location="cpu",
+            ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / "best_recon_aux.pt", map_location="cpu",
                             weights_only=False)
             model, _ = build_model_from_ckpt(ck, args.device)
         extract_arm(model, blocks_by_split, args.device, cache_path, arm)

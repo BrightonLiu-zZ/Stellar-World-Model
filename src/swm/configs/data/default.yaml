@@ -1,0 +1,10 @@
+seq_len: 4 # windows per training sequence (locked v1)
+window: 1024 # cadences per window (locked v1)
+n_quiet: 10000 # random quiet negatives drawn into the enriched subset
+val_frac: 0.15 # star-disjoint split fractions
+test_frac: 0.15
+max_absmax: 20.0 # pack-time guard: drop any window with max|flux| above this
+num_workers: 0 # DataLoader workers; 0 is Windows-spawn-safe and fast enough (memmap reads), raise on Linux/cluster
+pack_workers: 8 # threads prefetching .npz during packing (I/O bound)
+batch_size: 256 # OOM check passed on the 4060 (1.6GB peak); 512 also fits (3.2GB) if wanted
+limit: null # cap segments processed (smoke runs); null = all

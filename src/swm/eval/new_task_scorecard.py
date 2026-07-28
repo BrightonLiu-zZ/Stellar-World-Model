@@ -8,6 +8,9 @@ readout per task shape (plan D3):
   regression         numax_hon, numax_hatt, dnu_hatt, prot_kounkel -- Ridge, metric R2/RMSE/Spearman
                      (numax and dnu regressed in log10, the asteroseismic scaling)
 
+Two further probes ride the frozen v1 packed subset rather than the pool, behind their own flags:
+rotation_period (TARS, --with-rotation) and Ijspeert+2024 OBA eclipsing binaries (--with-ijspeert).
+
 Every cell is scored for each trained seed (exp03 leader best_recon_aux) and for the capacity-matched
 untrained arm; the headline number is the trained-minus-untrained gap with a 3-seed SE. rotation_period
 (TARS) rides the existing v1 packed subset, not the new pool. Rows append to
@@ -26,13 +29,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
+from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import RidgeCV
 from sklearn.metrics import average_precision_score, mean_squared_error, r2_score, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
 from swm.eval.readout_sweep import (build_model_from_ckpt, cached_mu, fit_readout_scores, pool_stars,
                                     window_score_scores)
-from swm.eval.new_task_extract import LEADER_DIR
+from swm.eval.new_task_extract import LEADER_DIR, arm_seed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S")
@@ -82,20 +86,44 @@ def y_for(tics: list[int], labels: pd.DataFrame, column: str) -> np.ndarray:
     return series.to_numpy()
 
 
-def score_regression(x_train, y_train, x_test, y_test) -> dict:
-    """Ridge (standardized, CV alpha) on mean-pooled mu; returns R2/RMSE/Spearman on the held-out target."""
-    scaler = StandardScaler()
-    x_tr = scaler.fit_transform(x_train)  # learn mean/std on train only (no leakage)
-    x_te = scaler.transform(x_test)
-    reg = RidgeCV(alphas=np.logspace(-2, 3, 10))  # L2 linear probe, alpha picked by leave-one-out CV
-    reg.fit(x_tr, y_train)
-    pred = reg.predict(x_te)
+def score_regression(x_train, y_train, x_test, y_test, regressor: str = "ridge") -> tuple[dict, np.ndarray]:
+    """Ridge (standardized, CV alpha) on mean-pooled mu; returns (R2/RMSE/Spearman, held-out predictions).
+
+    `regressor="gbm"` swaps in gradient-boosted trees -- used only by the A2 engineered-feature ceiling,
+    never by the frozen-probe headline (the v1 linear-probe lock stands).
+    """
+    if regressor == "gbm":
+        reg = HistGradientBoostingRegressor(random_state=0)
+        reg.fit(x_train, y_train)  # trees are scale-invariant, no standardization
+        pred = reg.predict(x_test)
+    else:
+        scaler = StandardScaler()
+        x_tr = scaler.fit_transform(x_train)  # learn mean/std on train only (no leakage)
+        x_te = scaler.transform(x_test)
+        reg = RidgeCV(alphas=np.logspace(-2, 3, 10))  # L2 linear probe, alpha picked by leave-one-out CV
+        reg.fit(x_tr, y_train)
+        pred = reg.predict(x_te)
     rho = spearmanr(y_test, pred).statistic
-    return {"r2": float(r2_score(y_test, pred)), "rmse": float(np.sqrt(mean_squared_error(y_test, pred))),
-            "spearman": float(rho)}
+    metrics = {"r2": float(r2_score(y_test, pred)), "rmse": float(np.sqrt(mean_squared_error(y_test, pred))),
+               "spearman": float(rho)}
+    return metrics, pred
 
 
-def score_detection(mu: dict, labels: pd.DataFrame, column: str) -> list[dict]:
+def _emit(sink: list | None, task: str, pooling: str, tics, y, scores) -> None:
+    """Record per-star held-out predictions for a scored cell, when the caller asked for them.
+
+    The aggregate CSV cannot support a paired star-bootstrap CI (plan 2026-07-25, decision 10) and cannot
+    draw a PR curve; both need the raw test-set predictions, so they are dumped alongside on request.
+    """
+    if sink is None:
+        return
+    sink.append({"task": task, "pooling": pooling, "tics": np.asarray(tics),
+                 "y": np.asarray(y), "scores": np.asarray(scores)})
+
+
+def score_detection(mu: dict, labels: pd.DataFrame, column: str, readout: str = "logistic",
+                    poolings: tuple[str, ...] = ("mean", "window_score"),
+                    sink: list | None = None) -> list[dict]:
     """Detection binary over the whole pool: logistic on mean-pool and on window_score(MIL); PR-AUC + ROC-AUC."""
     train_tics, train_blocks = mu["train"]
     test_tics, test_blocks = mu["test"]
@@ -104,22 +132,25 @@ def score_detection(mu: dict, labels: pd.DataFrame, column: str) -> list[dict]:
     rows = []
     x_train = pool_stars(train_blocks, "mean")
     x_test = pool_stars(test_blocks, "mean")
-    for pooling in ["mean", "window_score"]:
+    for pooling in poolings:
         if pooling == "mean":
-            scores = fit_readout_scores("logistic", x_train, y_train, x_test)
+            scores = fit_readout_scores(readout, x_train, y_train, x_test)
         else:
-            scores = window_score_scores("logistic", train_blocks, y_train, test_blocks)
+            scores = window_score_scores(readout, train_blocks, y_train, test_blocks)
         rows.append({"pooling": pooling, "pr_auc": float(average_precision_score(y_test, scores)),
                      "roc_auc": float(roc_auc_score(y_test, scores)),
                      "n_test_pos": int(y_test.sum()), "n_test": int(len(y_test))})
+        _emit(sink, column, pooling, test_tics, y_test, scores)
     return rows
 
 
-def score_contrastive(mu: dict, labels: pd.DataFrame) -> list[dict]:
+def score_contrastive(mu: dict, labels: pd.DataFrame, readout: str = "logistic",
+                      sink: list | None = None) -> list[dict]:
     """RGB(1) vs HeB(0) on the Sreenivas-only population: logistic on mean-pool; ROC-AUC primary."""
     rows = []
     pooled = {}
     y = {}
+    kept_tics = None
     for split in ["train", "test"]:
         tics, blocks = mu[split]
         target = labels["rgb_vs_heb"].reindex(tics)
@@ -127,17 +158,22 @@ def score_contrastive(mu: dict, labels: pd.DataFrame) -> list[dict]:
         feats = pool_stars(blocks, "mean")[keep]
         pooled[split] = feats
         y[split] = target[keep].astype(int).to_numpy()
-    scores = fit_readout_scores("logistic", pooled["train"], y["train"], pooled["test"])
+        if split == "test":
+            kept_tics = np.asarray(tics)[keep]
+    scores = fit_readout_scores(readout, pooled["train"], y["train"], pooled["test"])
     rows.append({"pooling": "mean", "roc_auc": float(roc_auc_score(y["test"], scores)),
                  "pr_auc": float(average_precision_score(y["test"], scores)),
                  "n_test_pos": int(y["test"].sum()), "n_test": int(len(y["test"]))})
+    _emit(sink, "rgb_vs_heb", "mean", kept_tics, y["test"], scores)
     return rows
 
 
-def score_regression_task(mu: dict, labels: pd.DataFrame, column: str, log_target: bool) -> list[dict]:
+def score_regression_task(mu: dict, labels: pd.DataFrame, column: str, log_target: bool,
+                          regressor: str = "ridge", sink: list | None = None) -> list[dict]:
     """One regression probe on the catalog-only population (prot capped at 5.7 d), Ridge on mean-pool mu."""
     pooled = {}
     y = {}
+    kept_tics = None
     for split in ["train", "test"]:
         tics, blocks = mu[split]
         target = labels[column].reindex(tics)
@@ -151,35 +187,90 @@ def score_regression_task(mu: dict, labels: pd.DataFrame, column: str, log_targe
             vals = np.log10(vals)
         pooled[split] = pool_stars(blocks, "mean")[keep]
         y[split] = vals
-    metrics = score_regression(pooled["train"], y["train"], pooled["test"], y["test"])
+        if split == "test":
+            kept_tics = np.asarray(tics)[keep]
+    metrics, pred = score_regression(pooled["train"], y["train"], pooled["test"], y["test"], regressor)
     metrics.update({"pooling": "mean", "n_test": int(len(y["test"])), "log_target": log_target})
+    _emit(sink, column, "mean", kept_tics, y["test"], pred)
     return [metrics]
 
 
-def rotation_subset_mu(arm: str, device: str) -> dict:
-    """Build/load the v1 packed-subset first-segment mu for one arm (rotation_period rides this, not the pool)."""
+def subset_mu(arm: str, device: str, cache_dir: Path | None = None, ckpt_dir: Path | None = None) -> dict:
+    """Build/load the v1 packed-subset first-segment mu for one arm (rotation_period + ijspeert ride this).
+
+    exp05 arms already have this cache on disk under experiments/exp05_*/models/B_seed<N>/extracted/, so
+    the caller normally hardlinks those in as <arm>.npz and no encoder pass runs here at all.
+    """
     packed = repo_root / "experiments" / "exp01_window256_seq16" / "packed"
-    cache_dir = repo_root / "experiments" / "new_task" / "subset_mu_cache"
+    cache_dir = cache_dir or repo_root / "experiments" / "new_task" / "subset_mu_cache"
+    ckpt_dir = ckpt_dir or LEADER_DIR
     cache_path = cache_dir / f"{arm}.npz"
     model = None
     if not cache_path.exists():
         import torch
         from swm.eval.skyline import _make_untrained
-        base = torch.load(LEADER_DIR / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
+        base = torch.load(ckpt_dir / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
         if arm == "untrained":
             mc = base["cfg"]["model"]
             model = _make_untrained(list(mc["enc_channels"]), int(mc["kernel_size"]), int(mc["z_dim"]),
                                     256, int(mc["gru_hidden"]), int(mc["gru_layers"]), device)
         else:
-            ck = torch.load(LEADER_DIR / f"B_seed{arm.replace('seed', '')}" / "best_recon_aux.pt",
+            ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / "best_recon_aux.pt",
                             map_location="cpu", weights_only=False)
             model, _ = build_model_from_ckpt(ck, device)
-    return cached_mu(cache_path, model, packed, 256, device, desc=f"rot[{arm}]")
+    return cached_mu(cache_path, model, packed, 256, device, desc=f"subset[{arm}]")
 
 
-def score_rotation_period(arm: str, device: str) -> list[dict]:
+def score_ijspeert(arm: str, device: str, cache_dir: Path | None = None, ckpt_dir: Path | None = None,
+                   readout: str = "logistic", sink: list | None = None) -> list[dict]:
+    """Ijspeert+2024 OBA eclipsing-binary detection on the frozen v1 subset for one arm."""
+    return score_ijspeert_from_mu(subset_mu(arm, device, cache_dir, ckpt_dir), readout, sink)
+
+
+def score_ijspeert_from_mu(mu: dict, readout: str = "logistic", sink: list | None = None) -> list[dict]:
+    """Ijspeert+2024 OBA-type eclipsing-binary detection on the frozen v1 subset (plan 2026-07-25).
+
+    Two populations are scored. `ijspeert` uses the whole subset. `ijspeert_excl_villanova` first removes
+    every Villanova EB from BOTH classes, so the probe cannot win by re-learning the v1 `eb` task -- 753 of
+    the 1,903 corpus Ijspeert TICs are also Villanova EBs, and on the v1 subset the overlap is heavier
+    still (74 of 93 test positives). This never touches the `eb` label (ADR-0007).
+    """
+    cat = pd.read_csv(repo_root / "labels" / "external" / "ijspeert2024_bright.csv")
+    positives = set(cat["TIC"].astype(int))
+    canon = pd.read_csv(repo_root / "labels" / "variability_labels_star.csv")
+    canon["tic_id"] = canon["tic_id"].astype(int)
+    villanova = set(canon.loc[pd.to_numeric(canon["eb"], errors="coerce").fillna(0) == 1, "tic_id"])
+
+    rows = []
+    for task, drop_eb in [("ijspeert", False), ("ijspeert_excl_villanova", True)]:
+        pooled = {}
+        y = {}
+        kept_tics = None
+        for split in ["train", "test"]:
+            tics, blocks = mu[split]
+            arr = np.array([int(t) for t in tics])
+            keep = np.array([t not in villanova for t in arr]) if drop_eb else np.ones(len(arr), bool)
+            pooled[split] = pool_stars(blocks, "mean")[keep]
+            y[split] = np.array([int(t in positives) for t in arr[keep]])
+            if split == "test":
+                kept_tics = arr[keep]
+        scores = fit_readout_scores(readout, pooled["train"], y["train"], pooled["test"])
+        rows.append({"task": task, "shape": "detection", "pooling": "mean",
+                     "pr_auc": float(average_precision_score(y["test"], scores)),
+                     "roc_auc": float(roc_auc_score(y["test"], scores)),
+                     "n_test_pos": int(y["test"].sum()), "n_test": int(len(y["test"]))})
+        _emit(sink, task, "mean", kept_tics, y["test"], scores)
+    return rows
+
+
+def score_rotation_period(arm: str, device: str, cache_dir: Path | None = None, ckpt_dir: Path | None = None,
+                          regressor: str = "ridge", sink: list | None = None) -> list[dict]:
     """rotation_period (TARS, P<=5 d) regression on the frozen v1 subset for one trained seed arm."""
-    mu = rotation_subset_mu(arm, device)
+    return score_rotation_period_from_mu(subset_mu(arm, device, cache_dir, ckpt_dir), regressor, sink)
+
+
+def score_rotation_period_from_mu(mu: dict, regressor: str = "ridge", sink: list | None = None) -> list[dict]:
+    """rotation_period (TARS, P<=5 d) regression on the frozen v1 subset, given that subset's mu."""
     canon = pd.read_csv(repo_root / "labels" / "variability_labels_star.csv")
     canon["tic_id"] = canon["tic_id"].astype(int)
     canon["rotation"] = pd.to_numeric(canon["rotation"], errors="coerce").fillna(0).astype(int)
@@ -189,14 +280,18 @@ def score_rotation_period(arm: str, device: str) -> list[dict]:
     lookup = keep_tics.set_index("tic_id")["rotation_period"]
     pooled = {}
     y = {}
+    kept_tics = None
     for split in ["train", "test"]:
         tics, blocks = mu[split]
         target = lookup.reindex(tics)
         keep = target.notna().to_numpy()
         pooled[split] = pool_stars(blocks, "mean")[keep]
         y[split] = target[keep].to_numpy(dtype=float)
-    metrics = score_regression(pooled["train"], y["train"], pooled["test"], y["test"])
+        if split == "test":
+            kept_tics = np.asarray(tics)[keep]
+    metrics, pred = score_regression(pooled["train"], y["train"], pooled["test"], y["test"], regressor)
     metrics.update({"pooling": "mean", "n_test": int(len(y["test"])), "log_target": False})
+    _emit(sink, "rotation_period", "mean", kept_tics, y["test"], pred)
     return [metrics]
 
 
@@ -205,27 +300,51 @@ def main() -> int:
     ap.add_argument("--arms", nargs="+", default=["seed0", "seed1", "seed2", "untrained"])
     ap.add_argument("--cache-dir", default=None, help="Default: experiments/new_task/mu_cache")
     ap.add_argument("--with-rotation", action="store_true", help="Also score rotation_period on the v1 subset.")
+    ap.add_argument("--with-ijspeert", action="store_true", help="Also score Ijspeert+2024 on the v1 subset.")
+    ap.add_argument("--subset-cache-dir", default=None,
+                    help="v1-subset mu cache for the subset-borne tasks. Default: experiments/new_task/subset_mu_cache")
+    ap.add_argument("--ckpt-dir", default=None,
+                    help="models/ dir used only if a subset cache must be built. Default: the exp03 leader.")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--out", default=None, help="Default: experiments/new_task/new_task_scorecard.csv")
+    ap.add_argument("--dump-scores", default=None,
+                    help="Parquet path for per-star held-out predictions (needed by the star-bootstrap CI).")
     args = ap.parse_args()
 
     cache_dir = Path(args.cache_dir) if args.cache_dir else repo_root / "experiments" / "new_task" / "mu_cache"
+    subset_cache_dir = Path(args.subset_cache_dir) if args.subset_cache_dir else None
+    ckpt_dir = Path(args.ckpt_dir) if args.ckpt_dir else None
     labels = label_frame()
     rows = []
+    dumps = []
     for arm in args.arms:
+        sink = [] if args.dump_scores else None
         mu = load_cache(cache_dir / f"{arm}.npz")
         for name, column in DETECTION:
-            for cell in score_detection(mu, labels, column):
+            for cell in score_detection(mu, labels, column, sink=sink):
                 rows.append({"arm": arm, "task": name, "shape": "detection", **cell})
-        for cell in score_contrastive(mu, labels):
+        for cell in score_contrastive(mu, labels, sink=sink):
             rows.append({"arm": arm, "task": "rgb_vs_heb", "shape": "contrastive", **cell})
         for name, column, log_target in REGRESSION:
-            for cell in score_regression_task(mu, labels, column, log_target):
+            for cell in score_regression_task(mu, labels, column, log_target, sink=sink):
                 rows.append({"arm": arm, "task": name, "shape": "regression", **cell})
         if args.with_rotation:
-            for cell in score_rotation_period(arm, args.device):
+            for cell in score_rotation_period(arm, args.device, subset_cache_dir, ckpt_dir, sink=sink):
                 rows.append({"arm": arm, "task": "rotation_period", "shape": "regression", **cell})
+        if args.with_ijspeert:
+            for cell in score_ijspeert(arm, args.device, subset_cache_dir, ckpt_dir, sink=sink):
+                rows.append({"arm": arm, **cell})
+        if sink is not None:
+            for entry in sink:
+                dumps.append(pd.DataFrame({"arm": arm, "task": entry["task"], "pooling": entry["pooling"],
+                                           "tic_id": entry["tics"], "y": entry["y"], "score": entry["scores"]}))
         log.info(f"scored arm {arm}")
+
+    if dumps:
+        dump_path = Path(args.dump_scores)
+        dump_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.concat(dumps, ignore_index=True).to_parquet(dump_path, index=False)
+        log.info(f"wrote per-star scores {dump_path}")
 
     result = pd.DataFrame(rows)
     result["run_id"] = pd.Timestamp.now().strftime("%Y%m%dT%H%M%S")

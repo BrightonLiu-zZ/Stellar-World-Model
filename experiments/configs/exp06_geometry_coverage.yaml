@@ -1,0 +1,169 @@
+# experiments/configs/exp06_geometry_coverage.yaml
+# ONE manifest = single source of truth for exp06 (first experiment under the rule).
+# Per-cell Hydra YAMLs under src/swm/configs/experiment/exp06/ and experiments/run_exp06_*.ps1 are
+# GENERATED from this file (banner: "# GENERATED ... DO NOT EDIT") — never hand-edited.
+
+name: exp06_geometry_coverage
+description: "Geometry/coverage axis at fixed 4096-cadence horizon + training-hygiene fixes (ep100, 6 seeds); cross-task differential gate with pulsating as built-in control"
+plan: docs/plans/2026-07-27-exp06-geometry-coverage.md
+
+# LOCKED DESIGN (grill session 2026-07-27). Decisions and what they rule out:
+#  - identity = geometry + hygiene. Rules out: consolidation (-> exp07), rollout-physics at fixed
+#    geometry (forensics: mu-trajectory white at w256, lag-1 ACF 0.017 - no predictor beats a constant).
+#  - fixed 4096-cadence horizon at train + K=4-matched eval arm. Rules out fixed-windows-per-star
+#    (shrinks sample; unequal training-data budget). Every geometry needs the same 4096 contiguous
+#    cadences -> identical qualifying star set across cells (threshold-preserving, see ablation skill).
+#  - max_epochs 100: aux still descending -4..-6%/30ep at the exp05 freeze with no flattening; selection
+#    piles at epoch 58-59; high-lambda winners most truncated; recruitment mid-flight (n_active 25.5+/-15
+#    plausibly = freeze mid-recruitment). Third under-run confirmation (exp03 H5, exp04 ep100 probe).
+#  - dyn axis = 2 levels {off, fwd_bwd@contribution 1.0}: exp05 ladder non-monotone, mechanism
+#    unidentified (P5) -> nothing to tune against. Lambda pilot-calibrated per geometry, overshoot
+#    accepted (edge blowup fires at lambda 7; it is a switch, not a dial).
+#  - 6 seeds: >2*SE gate = one-sided p~0.05 (n=4 was p~0.07, flagged by forensics plan).
+#  - recipe stays comb (fb0/beta0.1/combined aux): recipe change would confound the geometry axis.
+#    Edge-defect fix deferred to exp07 + ADR; 1-seed confirmation cell rides at head of queue.
+#    Known asymmetry: edge tax ~ 8 boundary samples/window -> scales inversely with window;
+#    task-independent, cancels in the cross-task gate. Recorded, not corrected.
+#  - gates (pre-registered, dyn-on arm, amplitude-residualized mean-pooled mu, logistic, first-segment
+#    bags, 6 paired seeds, one-sided >2*SE):
+#      H1-a: Delta_g(eb) - Delta_g(pulsating) > 0   for g in {512x8, 1024x4} vs 256x16
+#      H1-b: Delta_g(rotation) - Delta_g(pulsating) > 0
+#      control: Delta_g(pulsating) itself ~ 0 (coverage already 93% at every candidate window)
+#      C1-rep: fwd_bwd - off > 2*SE per task at every geometry
+#      H2 pre-gate: lag-1 mu-ACF (periodic stars) per geometry; rollout eval re-opened ONLY where
+#                   ACF >= 0.3. "rollout / constant < 1" NOT carried as a primary criterion.
+#  - transit: reported, never gated (weak-signal task; pooling lever, see MIL study).
+#  - dyn-off arm = same-direction robustness check, not gated (avoids doubling gate count).
+
+env:
+  python: C:/Users/user1/miniconda3/envs/swm/python.exe
+  pythonpath: src
+
+paths:
+  subset_dir: processed/subset                    # shared split; never rebuilt per experiment
+  packed_sources:                                 # per geometry; junctioned per cell by the runner
+    w256:  experiments/exp01_window256_seq16/packed   # exists
+    w512:  experiments/exp06_window512_seq8/packed    # NEW pack - Path-A subdivision from stored 1024s (free, faithful)
+    w1024: experiments/exp00_window1024_seq4/packed   # exists (v1 baseline)
+    w2048: experiments/exp06_window2048_seq2/packed   # NEW pack - REQUIRES pack.py merge extension:
+                                                      # pair time-adjacent stored windows (offsets 0-1, 2-3, ...),
+                                                      # keep a pair only if BOTH stored windows pass the absmax
+                                                      # guard at stored granularity; never pair across a drop.
+                                                      # Add a unit test before packing.
+
+base: # every knob written out (exp05 base_comb + the two hygiene changes: max_epochs, seeds)
+  data:
+    seq_len: 16          # overridden per geometry below; seq_len*window == 4096 always
+    window: 256
+    n_quiet: 10000
+    val_frac: 0.15
+    test_frac: 0.15
+    max_absmax: 20.0     # pack-time guard (inert for junctioned packs)
+    num_workers: 0       # Windows-spawn-safe
+    pack_workers: 8
+    batch_size: 256      # memory ~ batch*seq_len*window = batch*4096, constant across geometries
+    limit: null
+  model:
+    z_dim: 128
+    in_ch: 1
+    enc_channels: [32, 64, 128, 256]
+    kernel_size: 5
+    gru_hidden: 256
+    gru_layers: 1
+    dyn_mode: fwd        # overridden per cell (off cells keep fwd with lambda 0, as exp05_comb_off did)
+  train:
+    lambda_dyn: 0.0      # overridden per cell from constants.lambda_dyn
+    beta_target: 0.1
+    beta_warmup_epochs: 10   # transient benign: 1-4/48 exp05 selections landed inside it
+    free_bits: 0.0       # comb recipe (edge-confirmation cell overrides to 0.02)
+    lr: 0.0003
+    lr_schedule: cosine  # re-spans automatically over max_epochs
+    lr_min: 3.0e-6
+    max_epochs: 100      # HYGIENE CHANGE vs exp05 (60): see LOCKED DESIGN
+    patience: 10
+    grad_clip: 1.0
+    amp: true
+    accum_steps: 1
+    active_unit_kl_threshold: 0.01
+    resume: true         # overnight resume-safe
+    track_recon_aux_best: true    # dual checkpoint; eval consumes best_recon_aux.pt
+    select_include_dyn: false     # mu selected lambda-independently (apples-to-apples across dyn axis)
+    recon_aux:
+      type: combined     # COMB: log_psd + hf_weight*hf_time
+      weight: 0.3
+      psd_normalize: false
+      psd_eps: 1.0e-8
+      hf_weight: 1.0
+      mask_frac: 0.0
+      mask_span: 8
+    wandb:
+      mode: online       # user-terminal runs report W&B online; smokes override to disabled
+      project: stellar-world-model
+      entity: null
+
+recipes:
+  comb: {}                                   # base IS the comb recipe
+  comb_fb0p02: {train: {free_bits: 0.02}}    # edge-confirmation cell only
+
+constants:
+  # lambda = target_contribution(1.0) * steady recon / steady dyn, from a short pilot per geometry
+  # (exp05 procedure; achieved contribution recorded per cell at eval, overshoot ~1.31x accepted).
+  lambda_dyn_fbwd_c1p0:
+    w256: 66             # REUSED from exp05 calibration (same geometry/recipe) for comparability
+    w512: TBD_PILOT      # fill from pilot smoke before generating the runner; see pilots below
+    w1024: TBD_PILOT
+  pilots:                # short calibration runs, USER TERMINAL (training; hook blocks swm.train in CC)
+    - {geometry: w512,  cmd_note: "fwd_bwd, lambda=1, data.limit small, ~3 epochs; read steady dyn/recon from W&B"}
+    - {geometry: w1024, cmd_note: "same procedure"}
+
+sweep:
+  cells: # within-seed scientific priority order; edge confirmation first (fast, informs interpretation)
+    - {exp_name: exp06_edge_comb_fb0p02, recipe: comb_fb0p02, geometry: w256,
+       overrides: {data.window: 256, data.seq_len: 16, model.dyn_mode: fwd_bwd, train.lambda_dyn: 66,
+                   train.max_epochs: 60},   # exp05 settings exactly, for direct comparison to the 48-run table
+       seeds: [0],
+       prediction: "edge spike SURVIVES (ratio stays ~17x) -> recon_aux confirmed as immunity knob"}
+    - {exp_name: exp06_w256_off,   recipe: comb, geometry: w256,
+       overrides: {data.window: 256, data.seq_len: 16, model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp06_w256_fbwd,  recipe: comb, geometry: w256,
+       overrides: {data.window: 256, data.seq_len: 16, model.dyn_mode: fwd_bwd, train.lambda_dyn: 66}}
+    - {exp_name: exp06_w512_off,   recipe: comb, geometry: w512,
+       overrides: {data.window: 512, data.seq_len: 8, model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp06_w512_fbwd,  recipe: comb, geometry: w512,
+       overrides: {data.window: 512, data.seq_len: 8, model.dyn_mode: fwd_bwd, train.lambda_dyn: TBD_PILOT}}
+    - {exp_name: exp06_w1024_off,  recipe: comb, geometry: w1024,
+       overrides: {data.window: 1024, data.seq_len: 4, model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp06_w1024_fbwd, recipe: comb, geometry: w1024,
+       overrides: {data.window: 1024, data.seq_len: 4, model.dyn_mode: fwd_bwd, train.lambda_dyn: TBD_PILOT}}
+    - {exp_name: exp06_w2048_off,  recipe: comb, geometry: w2048,   # H1-ext coverage probe; dyn-off ONLY
+       overrides: {data.window: 2048, data.seq_len: 2, model.dyn_mode: fwd, train.lambda_dyn: 0},
+       note: "seq_len=2 too short for a fair dynamics arm; median EB period 57h vs 68h window -> EB coverage >50%"}
+  seeds: [0, 1, 2, 3, 4, 5]        # 6 seeds -> honest p~0.05 gate (cells may override, e.g. edge cell)
+  order: seed-major                # a -MaxHours cutoff leaves every cell with >=4 seeds
+  budget_hours: 20                 # 43 runs: 42 x ~25 min (ep100; VERIFY in smoke - exp05 measured ~15 min
+                                   # at ep60, cost/epoch ~constant across geometries at fixed horizon)
+                                   # + 1 x ~15 min edge cell + 2 packs + 2 pilots ~= 2 overnights
+  per_run_minutes: {ep100: 25, ep60: 15}   # exp05-derived estimate; REPLACE with smoke measurement
+  resume: {marker: DONE.txt, retries: 1}
+
+eval:
+  stages: [extract, probe]
+  variant: B
+  checkpoint: best_recon_aux
+  untrained_reference: per-geometry capacity-matched, per-invocation (NEVER automatic - exp04 memory)
+  readout: # all within the v1 linear lock; select on ABSOLUTE val score, gaps reported as context only
+    primary_gate: "logistic on amplitude-residualized mean-pooled mu, full first-segment bag"
+    residualize_scalars: [p2p_scatter_ratio, depth_5_95, mad, iqr]   # the 4 from exp06 forensics 2.2
+    secondary: [raw_mean, mean_std, kmatch4]
+    kmatch: {K: 4, draws: 3}      # bag-size deconfound: bags at 256/512/1024 hold 16/8/4 windows ->
+                                  # K=4 equalizes; coverage still moves. Reuses MIL kmatch machinery.
+    bag_scope: first-segment       # all-segment = protocol change needing ADR; NOT taken here
+  h2_pregate: "lag-1 mu-trajectory ACF (periodic stars) per geometry from trained ckpts; reuse
+               analyze_exp06_temporal.py machinery; rollout eval re-opened only where ACF >= 0.3"
+  followups_not_in_scope: [new-task scorecard at winning geometry, phase-aware STFT aux (exp07),
+                           decoder edge fix + ADR (exp07), consolidation (exp07)]
+
+outputs:
+  exp_root: experiments/exp06_<cell>            # one folder per cell: {models,results,figs}; packed junctioned
+  gap_csv: experiments/exp06_geometry_gap.csv   # per-task per-geometry per-arm scores + gates
+  edge_csv: experiments/exp06_edge_corner.csv   # confirmation-cell edge profile (analyze_exp06_edge.py)

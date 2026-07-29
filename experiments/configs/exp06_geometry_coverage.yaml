@@ -110,11 +110,10 @@ constants:
   # (exp05 procedure; achieved contribution recorded per cell at eval, overshoot ~1.31x accepted).
   lambda_dyn_fbwd_c1p0:
     w256: 66             # REUSED from exp05 calibration (same geometry/recipe) for comparability
-    w512: TBD_PILOT      # fill from pilot smoke before generating the runner; see pilots below
-    w1024: TBD_PILOT
-  pilots:                # short calibration runs, USER TERMINAL (training; hook blocks swm.train in CC)
-    - {geometry: w512,  cmd_note: "fwd_bwd, lambda=1, data.limit small, ~3 epochs; read steady dyn/recon from W&B"}
-    - {geometry: w1024, cmd_note: "same procedure"}
+    w512: 18             # pilot 2026-07-28 (fwd_bwd lambda=1, 8 ep): ep7 recon 1.078 / dyn 0.0612 = 17.6
+    w1024: 18            # pilot 2026-07-28: ep7 recon 1.160 / dyn 0.0632 = 18.4; dyn still -8..-12%/ep at
+                         # ep7 -> achieved contribution may run slightly under 1.0 (recorded at eval, accepted)
+  pilots: DONE 2026-07-28 # user terminal, exp06_pilot_w{512,1024} (throwaway namespaces, deleted after)
 
 sweep:
   cells: # within-seed scientific priority order; edge confirmation first (fast, informs interpretation)
@@ -130,11 +129,11 @@ sweep:
     - {exp_name: exp06_w512_off,   recipe: comb, geometry: w512,
        overrides: {data.window: 512, data.seq_len: 8, model.dyn_mode: fwd, train.lambda_dyn: 0}}
     - {exp_name: exp06_w512_fbwd,  recipe: comb, geometry: w512,
-       overrides: {data.window: 512, data.seq_len: 8, model.dyn_mode: fwd_bwd, train.lambda_dyn: TBD_PILOT}}
+       overrides: {data.window: 512, data.seq_len: 8, model.dyn_mode: fwd_bwd, train.lambda_dyn: 18}}
     - {exp_name: exp06_w1024_off,  recipe: comb, geometry: w1024,
        overrides: {data.window: 1024, data.seq_len: 4, model.dyn_mode: fwd, train.lambda_dyn: 0}}
     - {exp_name: exp06_w1024_fbwd, recipe: comb, geometry: w1024,
-       overrides: {data.window: 1024, data.seq_len: 4, model.dyn_mode: fwd_bwd, train.lambda_dyn: TBD_PILOT}}
+       overrides: {data.window: 1024, data.seq_len: 4, model.dyn_mode: fwd_bwd, train.lambda_dyn: 18}}
     - {exp_name: exp06_w2048_off,  recipe: comb, geometry: w2048,   # H1-ext coverage probe; dyn-off ONLY
        overrides: {data.window: 2048, data.seq_len: 2, model.dyn_mode: fwd, train.lambda_dyn: 0},
        note: "seq_len=2 too short for a fair dynamics arm; median EB period 57h vs 68h window -> EB coverage >50%"}

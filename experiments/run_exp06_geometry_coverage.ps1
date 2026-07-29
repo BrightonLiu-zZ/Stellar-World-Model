@@ -1,6 +1,6 @@
 # GENERATED FROM experiments/configs/exp06_geometry_coverage.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
 # exp06_geometry_coverage - TRAINING ONLY, run in your own terminal (GPU + W&B online). Plan: docs/plans/2026-07-27-exp06-geometry-coverage.md
-# 6 cells, seed-major order so a -MaxHours cutoff leaves every cell with even seed coverage.
+# 8 cells, seed-major order so a -MaxHours cutoff leaves every cell with even seed coverage.
 # Estimated per-run minutes: {'ep100': 25, 'ep60': 15} (VERIFY against the first runs; exp05-derived).
 # INTERRUPT/RESUME: Ctrl-C anytime; train.resume=true + last.pt resume mid-run; DONE.txt skips finished runs.
 # Usage:  cd C:\git_repo\Stellar-World-Model ; .\experiments\run_exp06_geometry_coverage.ps1
@@ -37,7 +37,9 @@ $cells = @(
   @('exp06_w256_off', 'w256', @(0, 1, 2, 3, 4, 5)),
   @('exp06_w256_fbwd', 'w256', @(0, 1, 2, 3, 4, 5)),
   @('exp06_w512_off', 'w512', @(0, 1, 2, 3, 4, 5)),
+  @('exp06_w512_fbwd', 'w512', @(0, 1, 2, 3, 4, 5)),
   @('exp06_w1024_off', 'w1024', @(0, 1, 2, 3, 4, 5)),
+  @('exp06_w1024_fbwd', 'w1024', @(0, 1, 2, 3, 4, 5)),
   @('exp06_w2048_off', 'w2048', @(0, 1, 2, 3, 4, 5))
 )
 

@@ -1,0 +1,203 @@
+# experiments/configs/exp07_aux_factorization.yaml
+# ONE manifest = single source of truth for exp07. Per-cell Hydra YAMLs under
+# src/swm/configs/experiment/exp07/ and experiments/run_exp07_aux_factorization.ps1 are GENERATED
+# from this file (python -m swm.exp.gen_sweep <this file>) - never hand-edited.
+
+name: exp07_aux_factorization
+description: "Aux term first-class: 2x2 recon_aux (type x weight) + Hann-taper edge-fix cell at 256x16, dyn {off, fwd_bwd}, full-dose lambda; winner = ML4PS final recipe"
+plan: docs/plans/2026-08-01-exp07-aux-factorization.md
+
+# LOCKED DESIGN (design session 2026-08-01, pre-checks C1-C4 same day). Decisions + what they rule out:
+#  - identity = objective/aux + dose + protocol (user decision 2026-08-01b; supersedes the 2026-07-30
+#    objective-lever withdrawal). Geometry retired (exp06 H1): everything at 256x16. Rollout closed (H2).
+#  - 2x2 factorization {combined, log_psd} x {0.1, 0.3}: the historical comb-vs-lpsd comparison moved
+#    aux TYPE and WEIGHT together (plus free_bits), so edge immunity and probe differences were
+#    unattributable. free_bits stays 0.0 everywhere: C3 measured fb0.02 moves no probe; edge-exonerated.
+#  - Hann cell (combined@0.3 + psd_window=hann): pre-check C1 confirmed the spike is the decoder BUYING
+#    spectral power at the window edge (dipole -3/+5, amplitude tuned to a log-PSD minimum; removing it
+#    raises log-PSD +237..348%, location control 27-38x). A symmetric Hann taper with taper-weighted
+#    demeaning makes edge power unbuyable BY CONSTRUCTION -> mechanism-targeted fix at full aux
+#    pressure. Enters the paper only if it wins the no-regression gate.
+#  - lambda dials are RECIPE-DEPENDENT (C4): log_psd dyn scale is 2.11x comb's at lambda=0, so the
+#    comb-family back-out (~49-67 -> dial 60) does NOT transfer; log_psd dial ~27 (0.45x). All dials
+#    provisional until the steady-state pilots (>=40 ep, F13: never calibrate at ep7) confirm; achieved
+#    dose gated at eval in [0.6, 1.4].
+#  - PROTOCOL (I7/F11-F13): cross-model selection through probe gates ONLY (val loss anti-selects,
+#    rho -0.58..-0.84); seed spread reported, never selected (no metric ranks seeds); checkpoint =
+#    best_recon_aux argmin (lambda-free, C1 replicated under it); ep100 with truncation accepted
+#    (paired comparisons share it; absolutes = floors).
+#  - seeds 0-3 now (40 runs ~17 h); winner + comb0p3 baseline (both arms) extended to seeds 4-5 after
+#    first eval (+8 runs ~3.5 h) so the headline gates reach the honest p~0.05 footing. 2-3 follow-up
+#    experiments are planned before the Aug 15 freeze -> lean grid, no fb/weight-1.0/multi-res cells.
+#  - exp07 is the LAST recipe-touching experiment; winner recipe frozen for ML4PS consolidation.
+#  - NO label regeneration before exp07 eval (ADR-0011 applies at the next regen, after).
+#  - PRE-REGISTERED PREDICTIONS (written before any run):
+#      P1 replication: comb0p3_fbwd edge ratio ~15-17x; fbwd-off > 2*SE on eb/rotation/transit.
+#      P2 pressure:    edge ratio at weight 0.1 << weight 0.3 for BOTH aux forms (pre-check C1 sec.7).
+#      P3 fix:         hann0p3_fbwd edge ratio <= 3x.
+#      P4 discriminator: lpsd0p3_fbwd spikes (>10x) if pressure-driven, immune (<3x) if form-driven.
+#      P5 report-only: amplitude-dominance (PC1-on-amp R2, amp_var_frac) separates by form at matched
+#                      weight if C2's split is form-driven, by weight if pressure-driven. Never gated.
+#  - GATES (one-sided > 2*SE, paired over seeds, logistic readout, first-segment bags):
+#      G-edge:     per-fbwd-cell edge ratio vs the P1-P4 predictions (analyze_exp06_edge machinery).
+#      G-noregress: winner cell (selected on ABSOLUTE probe score, F4) within 2*SE of comb0p3 on
+#                   eb/rotation/pulsating, both mean and mean_resid pooling; transit reported never gated.
+#      G-C1:       fbwd - off > 2*SE on >= 2 of {eb, rotation, transit} in the winner recipe.
+#      G-dose:     achieved lambda*dyn/recon (last-10-epoch train) in [0.6, 1.4] for every fbwd cell.
+
+env:
+  python: C:/Users/user1/miniconda3/envs/swm/python.exe
+  pythonpath: src
+
+paths:
+  repo_root: C:/git_repo/Stellar-World-Model
+  subset_dir: processed/subset                        # shared split; never rebuilt per experiment
+  packed_sources:                                     # single geometry; junctioned per cell by the runner
+    w256: experiments/exp01_window256_seq16/packed    # exists (exp01 Path-A subdivision pack)
+
+base: # every knob written out (exp06 base at 256x16; seeds/epochs per LOCKED DESIGN; psd_window is NEW)
+  data:
+    seq_len: 16
+    window: 256
+    n_quiet: 10000
+    val_frac: 0.15
+    test_frac: 0.15
+    max_absmax: 20.0     # pack-time guard (inert for junctioned packs)
+    num_workers: 0       # Windows-spawn-safe
+    pack_workers: 8
+    batch_size: 256
+    limit: null
+  model:
+    z_dim: 128
+    in_ch: 1
+    enc_channels: [32, 64, 128, 256]
+    kernel_size: 5
+    gru_hidden: 256
+    gru_layers: 1
+    dyn_mode: fwd        # overridden per cell (off cells keep fwd with lambda 0, exp05/06 convention)
+  train:
+    lambda_dyn: 0.0      # overridden per cell from constants.lambda_dyn
+    beta_target: 0.1
+    beta_warmup_epochs: 10
+    free_bits: 0.0       # everywhere (C3: no probe effect; exp06: edge-exonerated)
+    lr: 0.0003
+    lr_schedule: cosine
+    lr_min: 3.0e-6
+    max_epochs: 100
+    patience: 10
+    grad_clip: 1.0
+    amp: true
+    accum_steps: 1
+    active_unit_kl_threshold: 0.01
+    resume: true
+    track_recon_aux_best: true    # dual checkpoint; eval consumes best_recon_aux.pt
+    select_include_dyn: false     # mu selected lambda-independently (apples-to-apples across dyn axis)
+    recon_aux:
+      type: combined     # overridden per recipe
+      weight: 0.3        # overridden per recipe
+      psd_normalize: false
+      psd_eps: 1.0e-8
+      hf_weight: 1.0     # combined only; inert for log_psd
+      psd_window: none   # NEW exp07 knob: none = exp00-06 rectangular FFT | hann = taper-weighted-demean Hann
+      mask_frac: 0.0
+      mask_span: 8
+    wandb:
+      mode: online       # user-terminal runs report W&B online; smokes/pilots override to disabled
+      project: stellar-world-model
+      entity: null
+
+recipes: # the five aux configurations; base IS comb0p3
+  comb0p3: {}
+  comb0p1: {train: {recon_aux: {weight: 0.1}}}
+  lpsd0p3: {train: {recon_aux: {type: log_psd, weight: 0.3}}}
+  lpsd0p1: {train: {recon_aux: {type: log_psd, weight: 0.1}}}
+  hann0p3: {train: {recon_aux: {psd_window: hann}}}
+
+constants:
+  # lambda = target_contribution(1.0) * steady recon / steady dyn. FINAL (pilots 2026-08-01/02):
+  #  - Pilot doses at lambda-as-run, mean(lambda*train/dyn / train/recon) over ep30-39:
+  #      comb0p3@60 = 1.309 | comb0p1@60 = 1.235 | lpsd0p3@27 = 0.605 | lpsd0p1@27 = 0.460 | hann0p3@60 = 1.438
+  #  - FINDING (updates pre-check C4): at fb=0 the log_psd dyn scale is ~= comb's - the 2.11x dyn
+  #    inflation behind the 0.45x dial ratio was FREE_BITS-driven (exp05 lpsd cells ran fb=0.02).
+  #    The true dial is back in the universal lambda~50-67 band (I4) for every recipe.
+  #  - CALIBRATION RULE (drift-corrected; supersedes this block's earlier lambda_new = lambda/dose_ep40,
+  #    which would repeat F13 at ep40 instead of ep7): the ep40 readout is pre-steady - the SAME
+  #    recipe/geometry measured 1.343 at ep60 (exp05 c1p0@66) and 0.988 at ep100 (exp06 w256_fbwd@66),
+  #    drift factor ~0.74; our comb0p3@60 ep40 reading of 1.31 sits on that trajectory. So calibrate to
+  #    the ep100 target: lambda_new = lambda * 1.33 / dose_ep40 -> comb0p3 61, comb0p1 65, lpsd0p3 59,
+  #    lpsd0p1 78, hann0p3 56. Rounded for design cleanliness: 60/60/60/75/60 - four of five cells share
+  #    lambda=60, so the aux axes are NOT confounded with lambda, and hann0p3 vs comb0p3 at identical
+  #    lambda isolates the taper exactly. lpsd0p1 gets 75 (its collapsed 5-active-unit latent shrinks
+  #    dyn); rounded DOWN from 78 for sublinearity (raising lambda suppresses dyn). Predicted ep100
+  #    doses ~0.9-1.1 everywhere; the eval dose gate [0.6, 1.4] remains the safety net.
+  lambda_dyn_fbwd:
+    comb0p3: 60
+    comb0p1: 60
+    lpsd0p3: 60
+    lpsd0p1: 75
+    hann0p3: 60
+  pilots:
+    status: DONE 2026-08-01/02  # user terminal, exp07_pilot_* throwaway namespaces (deleted after),
+                                # 40 ep each, W&B online (runs tlup3x57/051o0av3/klrc8nq9/vd8b3xwn/e2souj2l)
+
+sweep:
+  cells: # within-seed scientific priority: baseline pair -> fix candidate -> discriminator -> weight axis
+    # seeds [0..5] on the winner (hann0p3, eval 2026-08-02) + comb0p3 baseline per sweep.seed_extension;
+    # DONE markers make seeds 0-3 no-ops, so regenerating + rerunning the runner adds only the 8 new runs.
+    - {exp_name: exp07_comb0p3_off,  recipe: comb0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp07_comb0p3_fbwd, recipe: comb0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: fwd_bwd, train.lambda_dyn: 60},
+       prediction: "P1: edge ratio ~15-17x; C1-rep passes on eb/rotation/transit"}
+    - {exp_name: exp07_hann0p3_off,  recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp07_hann0p3_fbwd, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: fwd_bwd, train.lambda_dyn: 60},
+       prediction: "P3: edge ratio <= 3x by construction; probes within 2*SE of comb0p3"}
+    - {exp_name: exp07_lpsd0p3_off,  recipe: lpsd0p3, geometry: w256,
+       overrides: {model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp07_lpsd0p3_fbwd, recipe: lpsd0p3, geometry: w256,
+       overrides: {model.dyn_mode: fwd_bwd, train.lambda_dyn: 60},
+       prediction: "P4 discriminator: spikes if pressure-driven, immune if form-driven"}
+    - {exp_name: exp07_comb0p1_off,  recipe: comb0p1, geometry: w256,
+       overrides: {model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp07_comb0p1_fbwd, recipe: comb0p1, geometry: w256,
+       overrides: {model.dyn_mode: fwd_bwd, train.lambda_dyn: 60},
+       prediction: "P2: edge ratio << comb0p3_fbwd"}
+    - {exp_name: exp07_lpsd0p1_off,  recipe: lpsd0p1, geometry: w256,
+       overrides: {model.dyn_mode: fwd, train.lambda_dyn: 0}}
+    - {exp_name: exp07_lpsd0p1_fbwd, recipe: lpsd0p1, geometry: w256,
+       overrides: {model.dyn_mode: fwd_bwd, train.lambda_dyn: 75},
+       prediction: "P2: edge ratio << lpsd0p3_fbwd; fb=0 isolates free_bits vs the exp05 lpsd cells"}
+  seeds: [0, 1, 2, 3]
+  order: seed-major                # a -MaxHours cutoff leaves every cell with even seed coverage
+  budget_hours: 20                 # 40 runs x ~25 min (ep100 at 256x16, exp06-measured) ~= 17 h
+  per_run_minutes: {ep100: 25, ep40: 10}
+  resume: {marker: DONE.txt, retries: 1}
+  seed_extension: "after first eval: winner recipe + comb0p3, BOTH arms, seeds [4, 5] (+8 runs ~3.5 h);
+                   headline gates re-scored at 6 seeds (honest p~0.05); no other cell extended"
+
+eval:
+  stages: [extract, probe]
+  variant: B
+  checkpoint: best_recon_aux
+  untrained_reference: capacity-matched w256, per-invocation (NEVER automatic - exp04 memory)
+  readout: # v1 linear lock; winner selected on ABSOLUTE val score (F4); gaps reported as context
+    primary_gate: "logistic on mean-pooled mu (raw + amplitude-residualized), full first-segment bag"
+    residualize_scalars: [p2p_scatter_ratio, depth_5_95, mad, iqr]
+    secondary: [mean_std]
+    bag_scope: first-segment
+  edge: "signed per-position profile + edge ratio per cell, all 10 cells (extend analyze_exp07_c1
+         machinery); gates P1-P4"
+  amp_dominance: "PC1 var share, participation ratio, PC1-on-4-scalars R2, amp_var_frac per cell
+                  (analyze_exp07_c2 machinery); P5, report-only"
+  dose_gate: "lambda * train/dyn / train/recon, last 10 epochs, from the W&B curve dump
+              (swm.eval.dump_wandb_history); PASS iff in [0.6, 1.4] per fbwd cell"
+  followups_not_in_scope: [consolidation eval fan on the winner (next session), edge ADR (write after
+                           G-edge resolves), new-task 7-probe scorecard on winner, window 128]
+
+outputs:
+  exp_root: experiments/exp07_<cell>              # one folder per cell: {models,results,figs}; packed junctioned
+  gap_csv: experiments/exp07_aux_gap.csv          # per-task per-cell per-arm probe scores + gates
+  edge_csv: experiments/exp07_edge_profiles.csv   # signed profiles + edge ratios, all cells
+  amp_csv: experiments/exp07_amp_dominance.csv    # P5 report-only metrics

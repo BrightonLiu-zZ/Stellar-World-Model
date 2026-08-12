@@ -43,3 +43,20 @@ class Dynamics(nn.Module):
             preds.append(step)
             inp = step.unsqueeze(1) # feed the prediction back (free-running)
         return torch.stack(preds, dim=1) # (B, n_steps, z) -- predicted z_2..z_{n_steps+1}
+
+
+class LinearDynamics(nn.Module):
+    """
+    exp08 dynamics-ladder rung: a single learned linear map z_t -> z_{t+1}, no recurrence, no
+    nonlinearity, no hidden state. Interface-identical to Dynamics.forward so the world model and
+    the loss treat the two interchangeably; separates "learned dynamics" from "recurrent nonlinear
+    dynamics" in the Q4 ablation.
+    """
+
+    def __init__(self, z_dim: int) -> None:
+        super().__init__()
+        self.head = nn.Linear(z_dim, z_dim)
+
+    def forward(self, mu_seq_in: torch.Tensor) -> torch.Tensor:
+        # mu_seq_in: (B, T-1, z) -- the inputs z_1..z_{T-1}
+        return self.head(mu_seq_in) # (B, T-1, z) -- predicted z_2..z_T, one map per step

@@ -1,0 +1,62 @@
+# @package _global_
+# GENERATED FROM experiments/configs/exp08_dynamics_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
+# exp08_dynamics_ladder cell exp08_frozen (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp08_frozen/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+# P4 discriminator: tracks smooth (pressure without learning behaves like a prior)
+
+exp_name: exp08_frozen
+data:
+  seq_len: 16
+  window: 256
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: frozen_fbwd
+train:
+  lambda_dyn: 22
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.0
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-06
+  max_epochs: 100
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: combined
+    weight: 0.3
+    psd_normalize: false
+    psd_eps: 1.0e-08
+    hf_weight: 1.0
+    psd_window: hann
+    mask_frac: 0.0
+    mask_span: 8
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

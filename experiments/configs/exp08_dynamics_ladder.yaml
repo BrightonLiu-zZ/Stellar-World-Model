@@ -1,0 +1,231 @@
+# experiments/configs/exp08_dynamics_ladder.yaml
+# ONE manifest = single source of truth for exp08. Per-cell Hydra YAMLs under
+# src/swm/configs/experiment/exp08/ and experiments/run_exp08_dynamics_ladder.ps1 are GENERATED
+# from this file (python -m swm.exp.gen_sweep <this file>) - never hand-edited.
+
+name: exp08_dynamics_ladder
+description: "Q4 smoothness ablation as a dynamics LADDER: what between 'no temporal term' and 'learned recurrent dynamics' earns the downstream benefit - smoothness prior / learned linear map / frozen random GRU, all on the frozen hann0p3 recipe vs the existing off + fwd_bwd arms"
+plan: docs/plans/2026-08-07-exp08-dynamics-ladder.md
+
+# LOCKED DESIGN (grilling session 2026-08-07; pre-checks CHK-1..5 closed Q1/Q2/Q3/Q8/Q11 same day).
+# Decisions + what they rule out:
+#  - exp08 = Q4 selected by the PRE-REGISTERED branch rule (exp08_design_forensics.ipynb section 6):
+#    Gate 0 PASS (+0.376 +/- 0.025 numax_hon vs untrained), Gate 1 HOLD (taper cost +0.0001 +/- 0.0037),
+#    CHK-3 tie-break did not fire (mu is NOT a re-encoding). Branch A (Q12 multitaper aux) is dead:
+#    it would buy back a cost the downstream menu cannot detect.
+#  - STAKES (CHK-4/Q11): the dynamics arm holds PRIVATE latent directions (CCA tail 0.235 vs seed-null
+#    0.873 at component 7; 10x residual-variance asymmetry) and only its mu is complementary to
+#    engineered features on all four v1 tasks. "Is your world model just a smoothness prior?" is now
+#    the paper's central question, not a caveat.
+#  - LADDER, not a single ablation cell (grill decision): off -> smooth (SFA-style slowness prior,
+#    no learned anything) -> linear_fbwd (learned dynamics, no recurrence/nonlinearity) -> frozen_fbwd
+#    (fixed random recurrent function: pressure without learning) -> fwd_bwd (the frozen recipe).
+#    If the benefit turns on somewhere along the ladder, the paper can say WHERE, not just whether.
+#  - SMOOTH FORM (grill decision): L2 first-difference on mu, plain/undetached - gradient-equivalent
+#    to the fwd+bwd stop-grad pair; dyn_mode=smooth carries NO predictor params (state_dict =
+#    encoder+decoder). Second-difference variant rejected (not the Q4-stated form).
+#  - ONE LAMBDA KNOB (grill decision): all arms weight their temporal term with train.lambda_dyn;
+#    dose = lambda*dyn/recon, same bookkeeping, same [0.6, 1.4] eval gate.
+#  - CALIBRATION (grill decision; F13/F25a traps): full-ep100 pilots, never early-epoch reads and
+#    never a drift factor borrowed from a different term. Operationally: the runner's SEED-0 WAVE IS
+#    the pilot wave (run with -MaxHours 1.3, ~3 runs). Read steady dose from the last-10-epoch curves;
+#    a cell whose dose lands in [0.6, 1.4] keeps its lambda and its seed-0 run PROMOTES to the sweep
+#    (DONE marker skips it); a cell outside the gate gets lambda_new = lambda*(1.0/dose), its seed-0
+#    outputs deleted, manifest updated here, regenerate, relaunch.
+#  - SEEDS 0-5 on every new cell (grill decision): pairs with the existing 6-seed hann0p3_{off,fbwd}
+#    runs, which are REUSED, never retrained. exp08 trains only the new arms.
+#  - EVAL SCOPE (grill decision): v1 four tasks (gates) + ADR-0010 7-probe downstream menu (reported,
+#    CHK-1 machinery) + mechanism-signature suite (analyze_exp07_mu_channel.py) on EVERY new arm.
+#  - PRE-REGISTERED PREDICTIONS (written before any run):
+#      P1: G-prior passes on eb (any temporal pressure recovers part of the off->fbwd gap).
+#      P2: G-gru passes on >= 1 of {eb, rotation} (the learned GRU adds something a prior does not).
+#      P3: ladder is monotone on eb: off <= smooth <= linear <= fwd_bwd (paired means).
+#      P4 discriminator: frozen_fbwd tracks smooth, not fwd_bwd (pressure without learning behaves
+#          like a prior). If instead it tracks fwd_bwd, the benefit never needed learned dynamics.
+#      P5: only the LEARNED arms (linear, fwd_bwd) reproduce the private-direction asymmetry and the
+#          4-task fusion gain; smooth and frozen do not.
+#  - GATES (one-sided > 2*SE, paired over seeds 0-5, logistic readout, first-segment bags,
+#    mean_resid gate pooling; mean pooling reported alongside; ABSOLUTE scores, F4):
+#      G-prior:  smooth - off      > 2*SE on eb AND rotation  (does ANY temporal pressure help)
+#      G-gru:    fwd_bwd - smooth  > 2*SE on eb OR rotation   (does the GRU add beyond the prior)
+#      G-dose:   achieved lambda*dyn/recon (last-10-epoch train) in [0.6, 1.4] per new cell
+#                (smooth_half targets 0.5, gate [0.3, 0.7])
+#      linear/frozen cells carry NO own gates; their paired deltas vs off and vs fwd_bwd are the
+#      ladder read and are reported with SEs.
+#  - SIGNATURE MATRIX (pre-registered SECONDARY, decision rule fixed before any run; machinery =
+#    analyze_exp07_mu_channel.py cross-ARM within recipe, exactly the CHK-4 protocol):
+#      measure per new arm: (i) CCA tail vs same-cell cross-seed null, (ii) arm-perp-off residual
+#      variance + residual probe asymmetry, (iii) features+mu - features fusion delta on 4 tasks.
+#      outcome matrix:
+#        smooth ties fwd_bwd on probes AND reproduces (i)-(iii) -> the dynamics term IS a generic
+#          temporal prior; reframe the paper (world model -> temporal-coherence regularizer).
+#        smooth ties on probes but NOT on (i)-(iii)             -> probes are insensitive; the
+#          mechanism claims stay GRU-specific; richest outcome, report both.
+#        smooth loses probes (G-gru passes, G-prior fails/partial) -> world-model framing survives
+#          the sharpest reviewer objection with a measured control.
+#        linear ties fwd_bwd everywhere -> "learned linear dynamics suffice"; recurrence is not the story.
+#  - Frozen recipe NOT reopened: every cell is hann0p3 (combined aux w0.3, Hann taper, fb 0, beta 0.1,
+#    geometry 256x16, ep100, best_recon_aux checkpoint, select_include_dyn false so mu selection is
+#    lambda-independent across arms - the exp05 convention that makes the dyn axis apples-to-apples).
+#  - Never pool across arms (F21) - exp08's whole axis IS the arm axis, so every number is quoted
+#    per-arm and paired; assert epoch.min()==0 before any epoch-range statistic (F22).
+
+env:
+  python: C:/Users/user1/miniconda3/envs/swm/python.exe
+  pythonpath: src
+
+paths:
+  repo_root: C:/git_repo/Stellar-World-Model
+  subset_dir: processed/subset                        # shared split; never rebuilt per experiment
+  packed_sources:                                     # single geometry; junctioned per cell by the runner
+    w256: experiments/exp01_window256_seq16/packed    # exists (exp01 Path-A subdivision pack)
+
+base: # every knob written out = the frozen hann0p3 recipe at 256x16 (exp07 winner, 6-seed confirmed)
+  data:
+    seq_len: 16
+    window: 256
+    n_quiet: 10000
+    val_frac: 0.15
+    test_frac: 0.15
+    max_absmax: 20.0     # pack-time guard (inert for junctioned packs)
+    num_workers: 0       # Windows-spawn-safe
+    pack_workers: 8
+    batch_size: 256
+    limit: null
+  model:
+    z_dim: 128
+    in_ch: 1
+    enc_channels: [32, 64, 128, 256]
+    kernel_size: 5
+    gru_hidden: 256      # inert in smooth/linear cells (no GRU built); kept for config uniformity
+    gru_layers: 1
+    dyn_mode: smooth     # overridden per cell (the ladder axis)
+  train:
+    lambda_dyn: 0.0      # overridden per cell from constants.lambda_guess (pilot wave confirms)
+    beta_target: 0.1
+    beta_warmup_epochs: 10
+    free_bits: 0.0
+    lr: 0.0003
+    lr_schedule: cosine
+    lr_min: 3.0e-6
+    max_epochs: 100
+    patience: 10
+    grad_clip: 1.0
+    amp: true
+    accum_steps: 1
+    active_unit_kl_threshold: 0.01
+    resume: true
+    track_recon_aux_best: true    # dual checkpoint; eval consumes best_recon_aux.pt
+    select_include_dyn: false     # mu selected lambda-independently (apples-to-apples across the ladder)
+    recon_aux:
+      type: combined
+      weight: 0.3
+      psd_normalize: false
+      psd_eps: 1.0e-8
+      hf_weight: 1.0
+      psd_window: hann   # the frozen recipe's taper (exp07)
+      mask_frac: 0.0
+      mask_span: 8
+    wandb:
+      mode: online       # user-terminal runs report W&B online; smokes override to disabled
+      project: stellar-world-model
+      entity: null
+
+recipes: # single recipe: base IS hann0p3; the sweep axis is dyn_mode, not the aux term
+  hann0p3: {}
+
+constants:
+  # lambda calibration, dose = lambda * train/dyn / train/recon over the last 10 epochs, target 1.0.
+  # WAVE 1 (2026-08-07, seed 0 at guesses 15/30/5, full ep100, curves in
+  # exp08_forensics/curves_exp08): ALL THREE out of gate ->
+  #   smooth@15:       steady dyn 0.00342, recon 0.933 -> dose 0.055 (early-stop ep77; mu_var 0.0099,
+  #                    about HALF the usual 0.018-0.022 - the slowness pressure compresses mu scale
+  #                    even at 5% dose)
+  #   linear_fbwd@30:  steady dyn 0.01667, recon 0.890 -> dose 0.562 (just under gate)
+  #   frozen_fbwd@5:   steady dyn 0.03895, recon 0.861 -> dose 0.226 (ep-1 raw dyn was 538; the KL
+  #                    collapse shrinks the term ~1e4x, which is why early-epoch reads are banned)
+  # WAVE 2 lambdas = lambda/dose (pre-registered rule): smooth 270, linear 55, frozen 22. Seed-0
+  # outputs of wave 1 deleted (invalidated pilots per LOCKED DESIGN). CAVEAT recorded before wave 2:
+  # smooth's 18x jump may saturate below dose 1 if the encoder can comply with the prior nearly for
+  # free (dyn ~ 1/lambda). If wave 2 lands < 0.6 again, that saturation is itself a finding - the
+  # prior is cheaply satisfiable in a way prediction error is not - and the design call (chase the
+  # dose vs freeze lambda and report the achieved dose) goes back to the user, not another silent
+  # iteration.
+  #   Original guess derivations kept for the record: smooth ~ persistence error 2.6-6.7x GRU's
+  #   one-step error -> 9-23; linear between GRU and persistence -> 30; frozen largest raw term -> 5.
+  lambda_wave2:
+    smooth: 270
+    linear_fbwd: 55
+    frozen_fbwd: 22
+  pilots:
+    status: "WAVE 2 FOLDED INTO THE OVERNIGHT SWEEP (user decision 2026-08-07): all 4 cells x 6
+             seeds queued at the wave-2 lambdas; seed-major order means the seed-0 wave completes
+             first, and the dose gate is applied at eval from the same runs. smooth_half filled at
+             135 = 0.5 x smooth before confirmation (see its cell note)"
+
+sweep:
+  cells: # within-seed scientific priority: primary ablation arm first, then ladder rungs, then dose probe
+    - {exp_name: exp08_smooth, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: smooth, train.lambda_dyn: 270},
+       prediction: "P1: recovers part of the off->fbwd eb gap; P5: does NOT reproduce the CCA/fusion signature"}
+    - {exp_name: exp08_linear, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: linear_fbwd, train.lambda_dyn: 55},
+       prediction: "P3: sits between smooth and fwd_bwd on eb; P5: reproduces the signature (learned arm)"}
+    - {exp_name: exp08_frozen, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: frozen_fbwd, train.lambda_dyn: 22},
+       prediction: "P4 discriminator: tracks smooth (pressure without learning behaves like a prior)"}
+    - {exp_name: exp08_smooth_half, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: smooth, train.lambda_dyn: 135},
+       prediction: "F25c analogue for the prior: dose 0.5 changes nothing vs exp08_smooth. Lambda =
+                    0.5 x smooth's wave-2 value, filled BEFORE wave-2 confirmation (user decision
+                    2026-08-07: run the whole sweep overnight); if smooth recalibrates, this cell
+                    inherits the same factor and the RELATIVE half-dose comparison survives"}
+    # POST-SWEEP CALIBRATION CELLS (user decision 2026-08-08, after the dose gate on the first 24
+    # runs): smooth@270 and smooth_half@135 both SATURATED (dose 0.007/0.005, latent collapsed to
+    # 1 active unit on all 6 seeds - the prior is trivially satisfiable and dose parity with the
+    # GRU term is unreachable; kept as the saturation/collapse documentation). frozen@22 OVERSHOT
+    # (dose 2.37 vs gate 1.4; superlinear in lambda, latent held wide at 69-114 units). Two new
+    # arms give the ladder its gate-clean rungs:
+    - {exp_name: exp08_frozen_lo, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: frozen_fbwd, train.lambda_dyn: 9},
+       prediction: "lambda = 22/2.37 ~= 9 -> dose in [0.6, 1.4]; P4 discriminator now reads off
+                    this cell (frozen@22 kept as an over-dose data point)"}
+    - {exp_name: exp08_smooth_lo, recipe: hann0p3, geometry: w256, seeds: [0, 1, 2, 3, 4, 5],
+       overrides: {model.dyn_mode: smooth, train.lambda_dyn: 15},
+       prediction: "wave-1 lambda: dose ~0.055 with ~4 active units = max smoothness pressure
+                    WITHOUT capacity collapse; the fair smoothness arm for G-prior/G-gru now that
+                    dose parity is measured unreachable"}
+  seeds: [0, 1, 2, 3, 4, 5]
+  order: seed-major                # -MaxHours 1.3 first = the seed-0 pilot wave (3 ready cells)
+  budget_hours: 12                 # 24 runs x ~25 min (ep100 at 256x16, exp07-measured) ~= 10 h + slack
+  per_run_minutes: {ep100: 25}
+  resume: {marker: DONE.txt, retries: 1}
+  reused_arms: "hann0p3_off = experiments/exp07_hann0p3_off (6 seeds), hann0p3_fbwd =
+                experiments/exp07_hann0p3_fbwd (6 seeds); NEVER retrained, paired by seed"
+
+eval:
+  stages: [extract, probe]
+  variant: B
+  checkpoint: best_recon_aux
+  untrained_reference: "existing capacity-matched w256 6-init reference remains valid (encoder
+                        architecture identical across all arms); per-invocation, never automatic"
+  readout:
+    primary_gate: "logistic on mean-pooled mu (raw + amplitude-residualized), full first-segment bag"
+    residualize_scalars: [p2p_scatter_ratio, depth_5_95, mad, iqr]
+    secondary: [mean_std]
+    bag_scope: first-segment
+  downstream_menu: "ADR-0010 7 probes via new_task_extract + new_task_scorecard (CHK-1 machinery,
+                    experiments/run_exp08_prechecks.ps1 pattern); REPORTED, not gated"
+  signature: "analyze_exp07_mu_channel.py per new arm, cross-ARM within recipe (CHK-4 protocol):
+              CCA tail vs same-cell seed null, arm-perp-off residual asymmetry, fusion delta;
+              decision rule = the SIGNATURE MATRIX in LOCKED DESIGN"
+  dose_gate: "lambda * train/dyn / train/recon, last 10 epochs, from swm.eval.dump_wandb_history;
+              PASS iff in [0.6, 1.4] (exp08_smooth_half: [0.3, 0.7])"
+  followups_not_in_scope: [MIL adoption decision (Q6, reporting not measurement), rotation-label
+                           confound (Q9), weight-0.1 dyn-off floor mystery (post-freeze)]
+
+outputs:
+  exp_root: experiments/exp08_<cell>                  # one folder per cell: {models,results,figs}; packed junctioned
+  gap_csv: experiments/exp08_ladder_gap.csv           # per-task per-cell probe scores + gates, paired vs exp07 arms
+  menu_csv: experiments/exp08_ladder_menu.csv         # ADR-0010 downstream menu per arm
+  signature_prefix: experiments/exp08_signature       # mu_channel outputs per arm

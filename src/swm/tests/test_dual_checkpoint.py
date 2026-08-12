@@ -75,6 +75,26 @@ def test_default_off_reproduces_single_checkpoint(tmp_path: Path):
     assert not (run_dir / "best_recon_aux.pt").exists() # flag off --> exp00-02 behavior, no second best
 
 
+def test_select_never_picks_a_warmup_epoch(tmp_path: Path):
+    """best_recon_aux must never select an epoch inside the beta warmup, however good its loss looks.
+
+    The epoch-0 row is logged after a full epoch at beta=0, so the model there is a near-deterministic
+    autoencoder that reconstructs BETTER than the converged one whose posterior the KL warmup has since
+    collapsed. A `recon + w*aux` argmin taken over the raw history therefore prefers epoch 0 outright --
+    which is what a post-hoc curve statistic once reported as a live selection bug (F18, retracted
+    2026-08-06). The loop has always guarded it; this pins the guard so it cannot be dropped silently,
+    and so any future curve analysis has an executable statement of what the selector actually does.
+    """
+    warmup = 2
+    cfg = make_cfg(tmp_path, track=True, max_epochs=5)
+    cfg.train.beta_warmup_epochs = warmup
+    train(cfg)
+    run_dir = tmp_path / "models" / "B_seed0"
+    for stem in ["best.pt", "best_recon_aux.pt"]:
+        ckpt = torch.load(run_dir / stem, map_location="cpu", weights_only=False)
+        assert int(ckpt["epoch"]) >= warmup, f"{stem} selected warmup epoch {ckpt['epoch']} < {warmup}"
+
+
 def test_resume_restores_best_select(tmp_path: Path):
     cfg = make_cfg(tmp_path, track=True, max_epochs=3)
     train(cfg)

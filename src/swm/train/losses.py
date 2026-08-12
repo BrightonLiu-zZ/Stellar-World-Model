@@ -15,7 +15,11 @@ def recon_loss(recon: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 
 
 def spectral_recon_loss(
-    recon: torch.Tensor, target: torch.Tensor, normalize: bool = False, eps: float = 1e-8
+    recon: torch.Tensor,
+    target: torch.Tensor,
+    normalize: bool = False,
+    eps: float = 1e-8,
+    window_fn: str = "none",
 ) -> torch.Tensor:
     """
     Log-power-spectrum reconstruction term (exp02): MSE between the log-PSD of the decoded and the input
@@ -28,12 +32,27 @@ def spectral_recon_loss(
     normalize=False keeps raw power (pulsation amplitude vs the noise floor is retained; flux is already
     per-segment MAD-normalized so amplitudes are comparable across stars); normalize=True rescales each
     window's power to sum one, so the term describes spectral shape only.
+    window_fn="hann" applies a symmetric Hann taper after demeaning (Welch-style periodogram). The
+    symmetric window is exactly zero at both endpoints, so the edge samples contribute nothing to the
+    spectrum: a decoder cannot buy spectral power with a window-edge impulse (exp07 edge fix; the
+    untapered rectangular FFT rewards exactly that, see exp07 pre-check C1).
     """
     # recon, target: (B, S, window, 1)
     r = recon.squeeze(-1).float() # (B, S, window); fp32 for a stable, non-overflowing FFT
     t = target.squeeze(-1).float() # (B, S, window)
-    r = r - r.mean(dim=-1, keepdim=True) # subtract per-window mean --> drops the DC bin
-    t = t - t.mean(dim=-1, keepdim=True)
+    if window_fn == "hann":
+        taper = torch.hann_window(r.shape[-1], periodic=False, device=r.device, dtype=r.dtype) # (window,), 0 at both ends
+        # taper-WEIGHTED demeaning: plain demeaning would let an edge impulse shift the mean and leak
+        # back in as a taper-shaped broadband component; weighting by the taper gives edge samples zero
+        # weight in the mean AND in the signal, and still zeroes the DC bin exactly
+        # (sum(taper*(x - m)) = 0 by construction).
+        r = (r - (r * taper).sum(dim=-1, keepdim=True) / taper.sum()) * taper
+        t = (t - (t * taper).sum(dim=-1, keepdim=True) / taper.sum()) * taper
+    elif window_fn == "none":
+        r = r - r.mean(dim=-1, keepdim=True) # subtract per-window mean --> drops the DC bin
+        t = t - t.mean(dim=-1, keepdim=True)
+    else:
+        raise ValueError(f"unknown psd window_fn {window_fn!r}; expected 'none' or 'hann'")
     pr = torch.fft.rfft(r, dim=-1).abs() ** 2 # (B, S, window//2 + 1) power spectrum
     pt = torch.fft.rfft(t, dim=-1).abs() ** 2
     if normalize:
@@ -101,3 +120,14 @@ def dynamics_loss(pred_next: torch.Tensor, target_next: torch.Tensor) -> torch.T
     """
     # pred_next, target_next: (B, S-1, z)
     return F.mse_loss(pred_next, target_next)
+
+
+def smoothness_loss(mu_seq: torch.Tensor) -> torch.Tensor:
+    """
+    exp08 dynamics-free temporal prior: MSE between consecutive latents (an SFA-style slowness
+    penalty). No stop-gradient on either side -- the symmetric pull has the same encoder gradients
+    as the fwd+bwd stop-grad pair, and unlike the GRU term there is no prediction path to protect.
+    Same MSE reduction over (B, S-1, z) as dynamics_loss, so lambda-dose bookkeeping is comparable.
+    """
+    # mu_seq: (B, S, z)
+    return F.mse_loss(mu_seq[:, 1:, :], mu_seq[:, :-1, :])

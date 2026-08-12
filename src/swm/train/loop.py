@@ -19,6 +19,7 @@ from swm.train.losses import (
     kl_free_bits,
     make_keep_mask,
     recon_loss,
+    smoothness_loss,
     spectral_recon_loss,
 )
 from swm.utils.seed import set_seed
@@ -71,12 +72,15 @@ def additive_aux_loss(recon: torch.Tensor, target: torch.Tensor, aux_cfg: DictCo
     """
     # recon, target: (B, S, window, 1)
     atype = aux_cfg.type
+    window_fn = str(aux_cfg.get("psd_window", "none")) # .get keeps pre-exp07 configs/checkpoints valid
     if atype == "log_psd":
-        return spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps))
+        return spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps),
+                                   window_fn=window_fn)
     if atype == "hf_time":
         return hf_time_loss(recon, target)
     if atype == "combined":
-        spectral = spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps))
+        spectral = spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps),
+                                       window_fn=window_fn)
         return spectral + float(aux_cfg.hf_weight) * hf_time_loss(recon, target) # one objective over all bands
     return torch.zeros((), device=recon.device) # none, masked
 
@@ -122,10 +126,12 @@ def run_epoch(
                 kl_loss, kl_total, kl_dim = kl_free_bits(out["mu_seq"], out["logvar_seq"], cfg.train.free_bits)
                 if "pred_roll" in out: # multistep mode: the optimized dyn term is the free-running rollout MSE
                     dl = dynamics_loss(out["pred_roll"], out["target_roll"])
-                else:
+                elif "pred_next" in out:
                     dl = dynamics_loss(out["pred_next"], out["target_next"])
                     if "pred_prev" in out: # fwd_bwd mode adds the reverse-time term under the same lambda (sum)
                         dl = dl + dynamics_loss(out["pred_prev"], out["target_prev"])
+                else: # smooth mode (exp08): dynamics-free first-difference penalty under the same lambda
+                    dl = smoothness_loss(out["mu_seq"])
                 al = additive_aux_loss(out["recon"], x, aux_cfg)
                 loss = rl + aux_weight * al + beta * kl_loss + cfg.train.lambda_dyn * dl
             if train:

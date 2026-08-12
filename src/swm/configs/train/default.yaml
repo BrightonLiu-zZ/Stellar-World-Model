@@ -19,6 +19,7 @@ recon_aux: # auxiliary reconstruction objective (exp02 sweep); default type=none
   weight: 0.0 # weight on the aux term; order-matched to the time-MSE scale per variant from smoke magnitudes
   psd_normalize: false # log_psd/combined: false=amplitude-retaining raw power, true=sum-1 spectral shape
   psd_eps: 1.0e-8 # floor inside log(power + eps) for the spectral term
+  psd_window: none # log_psd/combined: none=rectangular FFT (exp00-06 unchanged) | hann=symmetric taper, zero at endpoints (exp07 edge fix)
   hf_weight: 1.0 # combined only: weight of the hf_time sub-term relative to the log_psd sub-term
   mask_frac: 0.0 # masked only: fraction of each window's timesteps corrupted to zero
   mask_span: 8 # masked only: contiguous span length (cadences) per corrupted block

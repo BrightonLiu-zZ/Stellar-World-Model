@@ -210,10 +210,12 @@ def subset_mu(arm: str, device: str, cache_dir: Path | None = None, ckpt_dir: Pa
         import torch
         from swm.eval.skyline import _make_untrained
         base = torch.load(ckpt_dir / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
-        if arm == "untrained":
+        if arm.startswith("untrained"):
             mc = base["cfg"]["model"]
+            init_seed = 0 if arm == "untrained" else arm_seed(arm)  # untrained_s<N>: one init per seed (F17)
             model = _make_untrained(list(mc["enc_channels"]), int(mc["kernel_size"]), int(mc["z_dim"]),
-                                    256, int(mc["gru_hidden"]), int(mc["gru_layers"]), device)
+                                    256, int(mc["gru_hidden"]), int(mc["gru_layers"]), device,
+                                    seed=init_seed)
         else:
             ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / "best_recon_aux.pt",
                             map_location="cpu", weights_only=False)

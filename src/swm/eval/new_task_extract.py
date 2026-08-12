@@ -133,6 +133,8 @@ def main() -> int:
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--pool", default=None, help="Default: processed/subset/new_task_pool.parquet")
     ap.add_argument("--out-dir", default=None, help="Default: experiments/new_task/mu_cache")
+    ap.add_argument("--overwrite", action="store_true",
+                    help="Re-encode arms whose cache already exists (default: skip them, so a fan resumes).")
     args = ap.parse_args()
 
     ckpt_dir = Path(args.ckpt_dir) if args.ckpt_dir else LEADER_DIR
@@ -148,6 +150,17 @@ def main() -> int:
         pool = pd.concat(keep, ignore_index=True)
     log.info(f"pool: {len(pool)} TICs, device={args.device}")
 
+    # Decide what actually needs encoding BEFORE the npz replay. Replaying the pool costs ~10 min and
+    # runs once per invocation regardless of how many arms it serves, so a resumed fan whose arms are
+    # all cached would otherwise pay it for nothing.
+    todo = [a for a in args.arms if args.overwrite or not (out_dir / f"{a}.npz").exists()]
+    cached = [a for a in args.arms if a not in todo]
+    if cached:
+        log.info(f"{len(cached)} arm(s) already cached, skipped: {', '.join(cached)}")
+    if not todo:
+        log.info("every requested arm is cached; skipping the pool replay entirely")
+        return 0
+
     npz_index = index_pool_npz(seq_dir, set(pool["tic_id"].astype(int)))
     log.info(f"indexed first-segment npz for {len(npz_index)} pool TICs")
 
@@ -157,12 +170,16 @@ def main() -> int:
     for split in ["train", "val", "test"]:
         blocks_by_split[split] = load_pool_blocks(seq_dir, pool, split, window, npz_index)  # read npz once, reuse
 
-    for arm in args.arms:
+    for arm in todo:
         cache_path = out_dir / f"{arm}.npz"
-        if arm == "untrained":
+        if arm.startswith("untrained"):
+            # `untrained` keeps its historical seed-0 init; `untrained_s<N>` varies it, so the reference
+            # arm carries a measured init spread instead of the zero-variance one F17 warns about.
             mc = base["cfg"]["model"]
+            init_seed = 0 if arm == "untrained" else arm_seed(arm)
             model = _make_untrained(list(mc["enc_channels"]), int(mc["kernel_size"]), int(mc["z_dim"]),
-                                    window, int(mc["gru_hidden"]), int(mc["gru_layers"]), args.device)
+                                    window, int(mc["gru_hidden"]), int(mc["gru_layers"]), args.device,
+                                    seed=init_seed)
         else:
             ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / "best_recon_aux.pt", map_location="cpu",
                             weights_only=False)

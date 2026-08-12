@@ -362,9 +362,15 @@ def append_results(results_path: Path, rows: pd.DataFrame) -> None:
 # Orchestrator
 # ----------------------------------------------------------------------------------------------------
 def _make_untrained(enc_channels: list[int], kernel_size: int, z_dim: int, window: int,
-                    gru_hidden: int, gru_layers: int, device: str) -> WorldModel:
-    """Random-init world model with fixed seed 0, matching the exp01 gap-table untrained reference."""
-    torch.manual_seed(0) # fixed init -> reproducible untrained baseline (reproduces gap_table untrained)
+                    gru_hidden: int, gru_layers: int, device: str, seed: int = 0) -> WorldModel:
+    """Random-init world model at a fixed init seed; seed=0 is the exp01 gap-table untrained reference.
+
+    `seed` defaults to 0 so every pre-2026-08-06 caller reproduces bit-for-bit. It is exposed because a
+    single random init has no measured spread, which makes `delta / SE` against it anticonservative in
+    exactly the F17 way (the reference's own variance is silently set to zero). Passing seeds 0..N-1
+    gives the untrained arm a seed distribution so a trained-vs-untrained delta can be paired.
+    """
+    torch.manual_seed(seed) # fixed init -> reproducible untrained baseline (seed 0 reproduces gap_table)
     model = WorldModel(
         in_ch=1, enc_channels=enc_channels, kernel_size=kernel_size, z_dim=z_dim,
         window=window, gru_hidden=gru_hidden, gru_layers=gru_layers,

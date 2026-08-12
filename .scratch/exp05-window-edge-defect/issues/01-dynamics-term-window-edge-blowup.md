@@ -1,9 +1,13 @@
 # Dynamics term causes a ~17x reconstruction-error blowup at window edges (comb recipe only)
 
-Status: ready-for-human
+Status: root cause identified — `recon_aux` confirmed by experiment, `free_bits` exonerated;
+**mechanism identified 2026-08-01 (the decoder buys log-PSD power at the window edge)**
 Found: 2026-07-26, exp05 diagnostics notebook (§C1b)
+Diagnosed: 2026-07-27, exp06 design forensics notebook (§1)
+Confirmed: 2026-07-28, exp06 edge-confirmation cell (`exp06_edge_comb_fb0p02`)
+Mechanism: 2026-08-01, exp07 pre-check C1 (`experiments/analyze_exp07_c1_edge_sign.py`)
 Affects: `exp05_comb_*` with `train.lambda_dyn > 0` — 36 of 48 exp05 runs
-Blocks: exp06 planning (do not commit further to `comb` + dynamics until resolved)
+No longer blocks exp06 planning (exp06 ran; the confirmation cell was part of it)
 
 ## Summary
 
@@ -157,3 +161,73 @@ python -m swm.train +experiment=exp05/base_comb \
     model.dyn_mode=fwd_bwd train.lambda_dyn=66 train.free_bits=0.02 \
     paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
 ```
+
+### 2026-07-28 - the confirmation cell ran; the prediction held
+
+The cell above was carried inside exp06 and scored with `analyze_exp06_edge.py`
+(`experiments/exp06_edge_corner.csv`):
+
+| run | free_bits | edge ratio | bias fraction | Jacobian ratio | edge share of recon |
+|---|---|---|---|---|---|
+| `exp06_edge_comb_fb0p02` | **0.02** | **15.3x** | 0.72 | 2.37 | 22.5% |
+| group mean, `comb` + dyn on (48-run table) | 0.0 | 17.5x | 0.66 | 1.76 | 17.6% |
+| untrained reference | - | 1.09x | 0.06 | 0.27 | 3.2% |
+
+**The spike survives the KL floor essentially intact** (15.3x vs 17.5x), exactly as §1.4 of the
+forensics notebook predicted from the loss-sensitivity measurement. Every accompanying signature
+survives with it: the bias fraction is if anything higher (0.72), the decoder Jacobian is still
+inverted at the boundary (2.37 against the untrained 0.27), and the edge still carries ~22% of the
+reconstruction loss on 3.1% of the window.
+
+**Conclusion: `recon_aux` is the immunity knob; `free_bits` is exonerated.** The second corner of the
+originally proposed 2x2 is unnecessary and was not run. This closes the root-cause question this issue
+was opened for. The remaining work is the fix itself, which is tracked outside this issue in
+`experiments/exp06_geometry_README.md`.
+
+### 2026-08-01 - the MECHANISM, plus two corrections to this issue
+
+exp07 pre-check C1 (`experiments/analyze_exp07_c1_edge_sign.py`, 2,000 test windows, 9 runs across 5
+cells; full tables in `tmp/handoff/2026-08-01-exp07-precheck-request.md` §RESULTS). Everything above
+said *which knob* confers immunity. This says *what the decoder is buying*.
+
+**The decoder is purchasing high-frequency spectral power at the window edge.** Replacing positions
+{0, 255} with the input's own values (edge residual forced to exactly zero) *raises* the log-PSD term
+by **+237% to +348%** on every `comb`+dynamics-on arm, while time-MSE falls 11-17% and the `hf_time`
+sub-term moves only −0.5 to −4%. The entire effect is the spectral sub-term. An under-powered
+reconstruction pays a large log-PSD penalty; two edge samples are the cheapest place to inject
+broadband power, because they cost only 2/256 of the time-MSE.
+
+**The amplitude is tuned, not incidental.** Rescaling the model's own edge deviation by a factor
+(0 = interior-extrapolated, 1 = as trained), log-PSD has a clear minimum at scale **~1.5** for every
+dynamics-on arm — the trained value sits at ~67% of the pure-log-PSD optimum, undershooting exactly as a
+weighted trade against time-MSE and hf_time predicts. The dynamics-off control is flat (2.09-2.29 across
+the whole sweep). This also resolves what looked like a contradiction with comment 3 above: *adding* a
++3 impulse raises log-PSD 68.8% AND *removing* the edge raises it 250%, because the learned value sits
+near a minimum and both directions climb out of it.
+
+**Location control.** The same operation (two residuals forced to zero) applied at interior positions
+{96, 160} raises log-PSD only 6.5-10.3%, i.e. **27-38x less** than at the edges. The rise is a property
+of the edge, not of perturbing a 256-bin spectrum.
+
+**Correction 1 — the spike is not a positive flux bias; it is an antisymmetric dipole.** Mean *signed*
+error (this issue and the profile parquet stored MSE only, which is sign-blind): **−2.95 at p0 and
++5.11 at p255** on `exp06_edge_comb_fb0p02`, −3.22 / +4.69 on `exp06_w256_fbwd`, with the interior at
+zero. Polarity is seed-dependent (`exp05_comb_fbwd_c1p0` seed 0 runs +4.52 / −2.21) but the
+leading-versus-trailing *opposition* holds in all 9 runs measured.
+
+**Correction 2 — "dynamics-on arms are worse at the leading edge" was a single-seed reading.** Averaged
+over seeds the **trailing** edge is worse in every group: `exp06_w256_fbwd` 16.5 (p0) vs 30.1 (p255),
+`exp05_comb_fbwd_c1p0` 15.2 vs 19.2, `exp05_comb_off` 2.4 vs 11.5.
+
+**The fix follows from the mechanism.** Under a Hann-tapered log-PSD the purchase becomes literally
+unbuyable — a non-periodic Hann window is exactly zero at both endpoints, so `Δ log-PSD` for every edge
+ablation is 0.0000 while the interior control still moves (−0.58 to −0.69). That is an analytic
+consequence of the taper, not an empirical finding. Two caveats for whoever implements it: a taper also
+blinds the aux term to genuine flux structure near window boundaries, which time-MSE alone would then
+carry; and it does not touch `hf_time`, which was never the culprit.
+
+**Open, and testable on exp07's own axes:** the immune arm's aux *weight* is 0.1 while every spiky arm's
+is 0.3. Since the spike is a tuned optimum of a weighted term, spike severity should scale with
+`recon_aux.weight`. If exp07's weight axis {0.1, 0.3} does not move the edge ratio for both aux forms,
+then immunity is about aux *form* rather than aux *pressure*, and the exp05 lpsd-vs-comb comparison is
+confounded by weight as well as by `free_bits`.

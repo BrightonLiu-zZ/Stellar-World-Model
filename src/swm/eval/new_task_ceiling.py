@@ -75,6 +75,61 @@ def _guard(task: str, shape: str, arm: str, score) -> list[dict]:
                  "skipped": "empty population"}]
 
 
+def features_to_frame(feat_mu: dict) -> pd.DataFrame:
+    """Flatten a {split: (tics, 1-row blocks)} feature table into one tic-keyed frame for the parquet cache."""
+    frames = []
+    for split, (tics, blocks) in feat_mu.items():
+        values = np.concatenate(blocks, axis=0)
+        frame = pd.DataFrame(values, columns=FEATURE_NAMES)
+        frame.insert(0, "split", split)
+        frame.insert(0, "tic_id", np.asarray(tics, dtype=np.int64))
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True)
+
+
+def frame_to_features(frame: pd.DataFrame, splits: list[str]) -> dict:
+    """Inverse of `features_to_frame`: rebuild the 1-row-per-star block layout the scorers consume."""
+    result = {}
+    for split in splits:
+        rows = frame[frame["split"] == split]
+        tics = rows["tic_id"].astype(int).tolist()
+        blocks = []
+        for values in rows[FEATURE_NAMES].to_numpy(dtype=np.float32):
+            blocks.append(values.reshape(1, -1))
+        result[split] = (tics, blocks)
+    return result
+
+
+def cached_pool_features(pool_path: Path, seq_dir: Path, limit: int | None,
+                         cache_path: Path | None = None) -> dict:
+    """Pool feature table, backed by a parquet cache so the one-FFT-per-star pass runs once per corpus.
+
+    A `--limit` run is never cached and never reads the cache: a truncated table sitting at the full
+    table's path would silently shrink every downstream population.
+    """
+    cache_path = cache_path or repo_root / "experiments" / "exp08_menu_features_pool.parquet"
+    if limit is None and cache_path.exists():
+        log.info(f"loaded pool feature cache {cache_path}")
+        return frame_to_features(pd.read_parquet(cache_path), ["train", "val", "test"])
+    feat_mu = pool_feature_mu(pool_path, seq_dir, limit)
+    if limit is None:
+        features_to_frame(feat_mu).to_parquet(cache_path, index=False)
+        log.info(f"wrote pool feature cache {cache_path}")
+    return feat_mu
+
+
+def cached_subset_features(packed_dir: Path, cache_path: Path | None = None) -> dict:
+    """v1-subset feature table (rotation_period + ijspeert ride it), same parquet-cache contract."""
+    cache_path = cache_path or repo_root / "experiments" / "exp08_menu_features_subset.parquet"
+    if cache_path.exists():
+        log.info(f"loaded subset feature cache {cache_path}")
+        return frame_to_features(pd.read_parquet(cache_path), ["train", "test"])
+    feat_mu = subset_feature_mu(packed_dir)
+    features_to_frame(feat_mu).to_parquet(cache_path, index=False)
+    log.info(f"wrote subset feature cache {cache_path}")
+    return feat_mu
+
+
 def pool_feature_mu(pool_path: Path, seq_dir: Path, limit: int | None) -> dict:
     """Engineered-feature 'mu' over the new-task pool, replayed from npz exactly as new_task_extract does."""
     pool = pd.read_parquet(pool_path)
@@ -122,12 +177,12 @@ def main() -> int:
     labels = label_frame()
 
     log.info("building pool feature table (one FFT + moments per star)")
-    feat_mu = pool_feature_mu(pool_path, seq_dir, args.limit)
+    feat_mu = cached_pool_features(pool_path, seq_dir, args.limit)
 
     subset_mu_feats = None
     if args.with_subset:
         log.info("building v1-subset feature table")
-        subset_mu_feats = subset_feature_mu(repo_root / "experiments" / "exp01_window256_seq16" / "packed")
+        subset_mu_feats = cached_subset_features(repo_root / "experiments" / "exp01_window256_seq16" / "packed")
 
     rows = []
     for arm, readout, regressor in CEILINGS:

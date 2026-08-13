@@ -26,11 +26,20 @@ Last updated **2026-08-07**. Current frozen training recipe: `hann0p3` (exp07). 
 qualified Q5 (F27), and selected **Q4 as exp08** by the pre-registered branch rule. Six of twelve
 entries are now closed. **Q4 has since closed too** (2026-08-08, exp08 — see its entry below and
 `exp08_ladder_README.md`). What remains genuinely open: **Q6** (blocked on a reporting decision, not a
-measurement), **Q9** (report-level label confound), **Q10** (blocked on the freeze), and two loose ends —
+measurement), **Q9** (report-level label confound), **Q10** (blocked on the freeze), and one loose end —
 the weight-0.1 dyn-off cells sit near the untrained floor with **no explanation** since F18's was
-retracted, and the **fusion claim has never been measured on the ADR-0010 menu** (`features ⊕ µ` exists
-only for the four v1 tasks in `exp07_channel_probe.csv`; `exp08_prechecks/menu.csv` carries the seven
-downstream probes with no fusion readout at all).
+retracted.
+
+The **fusion-on-the-menu** loose end is **CLOSED 2026-08-11** (roadmap R1,
+`experiments/exp08_menu_channel_README.md`): measured on all 7 ADR-0010 probes × {off, fbwd} × 6 seeds,
+verdict **mixed and scoped**. Fusion beats `features_only` on the frozen recipe's dynamics arm for
+`solar_like_osc` (+0.071 ± 0.006) and `numax_hon` (+0.036 ± 0.002), plus the declared null `flare`
+(+0.051, reported never claimed); it is neutral on `rotation_period` and negative on `osc_giant`,
+`ijspeert` and `rgb_vs_heb`, where the feature baseline is strong or the probe small and the untrained
+arm loses by the same margin (readout-capacity cost, not a representation failure). The *dynamics
+specificity* generalises: `delta_fbwd − delta_off` clears 2·SE on 5 of 7 probes. `mu_resid_full` shows µ
+is no re-encoding of the engineered basis here either, graded by arm (numax_hon R² 0.50 fbwd / 0.21 off
+/ 0.07 untrained). The paper's fusion claim must therefore be scoped in print (R4).
 
 ---
 

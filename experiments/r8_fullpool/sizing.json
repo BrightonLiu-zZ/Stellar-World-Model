@@ -1,0 +1,13 @@
+{
+  "pilot_stars": 2000,
+  "replay_s": 53.08865785598755,
+  "feature_s": 4.507982969284058,
+  "encode_s": 0.6920652389526367,
+  "n_added": 106284,
+  "fixed_hours": 0.8502224129823844,
+  "hours_per_arm": 0.01021603636900584,
+  "arm_set": "full",
+  "projected_hours_full": 1.0341110676244896,
+  "projected_hours_fbwd6": 0.9115186311964195,
+  "projected_hours_fbwd3": 0.880870522089402
+}

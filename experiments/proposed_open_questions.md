@@ -530,6 +530,58 @@ Both are **specification defects in the measurements that killed the framing**, 
   does not reproduce the oscillation — any recovered framing must be about the *latent*, never about
   reconstruction fidelity.
 
+### Verdict — test 1 RUN 2026-08-11 (R11): **FAIL, the linear map is a smoother**
+
+`experiments/analyze_exp08_linear_eigen.py` → `exp08_linear_eigen{,_summary,_gates}.csv`,
+`figs/exp08_linear_eigen.png`. 6 seeds × {fwd, bwd} from `best_recon_aux.pt`, gates fixed before any
+number was read (script docstring carries the pre-registration verbatim).
+
+**Gates: O1 0/12, O2 0/12, O3 12/12 — but O3 is the one that does not count** (below). PASS required
+all three, so the pre-registered verdict is **FAIL (smoother)**.
+
+- **µ mass sits on fast-decaying modes.** µ-mass-weighted median |λ| over complex modes is
+  **0.33–0.41** across seeds (τ ≈ **0.35 d** ≈ one window step). Only **8.6–9.4 %** of µ mass sits on
+  |λ| ≥ 0.9, and the largest |λ| among top-decile-mass modes is **0.58** (fwd) / **0.64** (bwd) — O1
+  fails on every seed and direction.
+- **The near-unit modes are in dead directions.** Spectral radius is **1.015–1.122**, genuinely above
+  the random-init null (95th pct 0.650), but the radius-carrying mode holds **0.09–0.7 %** of µ mass
+  and is either real or implies P = **15–74 d**, far outside the band. A near-unit eigenvalue µ never
+  visits is not phase transport.
+- **Reciprocity kills transport outright.** `‖A_bwd A_fwd − I‖_F/√|S|` = **0.78–0.92** (null 1.01),
+  and both directions contract. An invertible rotation forward requires reciprocal moduli backward;
+  a map that contracts in *both* time directions is destroying information, not transporting phase.
+- **The latent affords nothing better.** The OLS-optimal one-step map on the same cached µ is *more*
+  contractive (mass-weighted mean |λ| **0.166** vs the trained **0.407**; its top-mass backward modes
+  are **0 %** complex). Training moved slightly *toward* persistence relative to the least-squares
+  optimum, and still landed nowhere near the unit circle. The FAIL is a statement about the latent,
+  not about optimisation.
+- **The map is a contraction toward ~the origin.** ‖b‖ = **0.010–0.039** against median ‖µ‖ ≈ **1.0**;
+  fixed-point norm **0.011–0.227**, `cond(I−A)` 9.6–64.
+- **O3 passes and should be discounted.** θ is non-uniform (KS **0.15–0.22** vs null 0.028) and all 6
+  seeds carry an in-band mode within ±20 % of a common P (0.836 d fwd, 1.218 d bwd) — but the
+  **random-init null also scores 6/6** on that criterion, because each map has ~100 in-band complex
+  modes. The agreement half of O3 as I pre-registered it is close to vacuous; disclosed rather than
+  quietly rewritten. The θ non-uniformity that *is* real points the wrong way for the framing: mass
+  concentrates at θ < 0.3 rad (34 % of mass, mean |λ| 0.72), i.e. the slow quasi-real direction — the
+  smoother's direction, not an oscillation peak. The implied-P histogram overlaps the corpus periods,
+  and so does the null's (right panel) — the overlap is generic to any 128×128 real matrix.
+- **Robustness.** Active-subspace leakage `‖(I−P)AP‖/‖AP‖` = **0.65–0.83**, so the active dims are far
+  from A-invariant and the `active_sub` submatrix view is a fiction — the mass-weighted full spectrum
+  (pre-chosen as the verdict) is the only defensible read. Non-normality 0.13–0.15 (eigenvalues answer
+  the asymptotic question; transient amplification is not excluded). `last.pt` reproduces every
+  spectral radius to 3 dp, so the selection epoch is not sitting on a moving spectrum. Active-dim
+  counts by µ variance are **8 / 47 / 11 / 9 / 64 / 12** — the seed instability of attack item #2 is
+  visible here too, and the verdict is identical in every seed regardless.
+
+**What this settles.** A3 strengthens: the linear arm's downstream benefit is not phase transport, it
+is a one-step damped contraction, which is exactly what "unsatisfiable prediction pressure creates the
+content" predicts. The strong framing is **not** recovered by test 1, and the paper should not claim
+latent oscillator transport on the strength of the linear arm.
+
+**What this does not settle.** This is the *linear* arm only. The GRU is nonlinear and stateful, so it
+has no A to decompose — test 4 (probe the hidden state `h`) is the analogue and remains the live route
+to a mechanism sentence. Tests 2–4 remain open (R15/R9b).
+
 ---
 
 ## Suggested ledger entries

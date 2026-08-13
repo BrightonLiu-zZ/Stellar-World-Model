@@ -8,17 +8,26 @@ neither. "Is your world model just a smoothness prior?" is answered no, with a m
 smoothness at its maximum satisfiable pressure gains eb +0.019 ± 0.010 / rotation +0.015 ± 0.009
 (both ns), while the GRU clears it by >2·SE on both. On the v1 tasks the strong "world model"
 reading loses ground — a linear predictor is statistically indistinguishable from the GRU on eb and
-rotation — but the ADR-0010 menu restores it: **on every transfer probe the GRU leads the entire
-ladder** (numax_hon 0.802 vs best rung 0.755; see the menu section), and it is the only arm that
-gains eb/rotation while holding pulsating at off-parity (linear and frozen pay −0.014…−0.018,
->2·SE). One-line mechanism: *unsatisfiable prediction pressure creates the content; the learned
-recurrent predictor is what makes it transfer.*
+rotation — but the ADR-0010 menu keeps it **best-rounded**: the GRU is numerically ahead of every rung
+on five of the six claimable transfer probes and significantly ahead of the *best competing rung* on
+two of them (numax_hon +0.047 ± 0.007, solar_like_osc +0.032 ± 0.010; see the menu section), and it is
+the only arm that gains eb/rotation while holding pulsating at off-parity (linear and frozen pay
+−0.014…−0.018, >2·SE). One-line mechanism: *unsatisfiable prediction pressure creates the content; the
+learned recurrent predictor is what makes it transfer best.*
 
 Design + config: `experiments/configs/exp08_dynamics_ladder.yaml` (LOCKED DESIGN block; grilled
 2026-08-07). Plan: `docs/plans/2026-08-07-exp08-dynamics-ladder.md`. 36 runs (6 cells × 6 seeds) on
 the frozen `hann0p3` recipe; `exp07_hann0p3_{off,fbwd}` (6 seeds) reused as the ladder ends.
 
-## The ladder (mean_resid pooling, 6 seeds, seed-paired; `exp08_ladder_gap.csv`)
+## The ladder (`mean ⊥ amp` readout, 6 seeds, seed-paired; `exp08_ladder_gap.csv`)
+
+**Readout note.** `mean_resid` in the CSVs is *not* a pooling operator: it is `mean` pooling with a
+four-column amplitude basis (`p2p_scatter_ratio`, `depth_5_95`, `mad`, `iqr`) linearly projected out,
+fitted on train only, so it reads systematically lower than `mean` and answers "what does µ carry
+beyond amplitude". It is written **`mean ⊥ amp`** here and should never be quoted alone as the probe
+score. Only the coarse ladder ordering is readout-invariant (rank correlations 0.43–0.94 against
+`mean`, `src/notebooks/exp08_diagnostics.ipynb` §G), so **every table must state its readout**. At
+`mean` the same ladder reads eb 0.738 → 0.771 rather than 0.510 → 0.590.
 
 | task | off | smooth_lo | linear | frozen_lo | frozen@22 | fwd_bwd | untrained |
 |---|---|---|---|---|---|---|---|
@@ -49,7 +58,7 @@ off; at/below the untrained floor).
   therefore the fair smoothness arm; `smooth`@270 and `smooth_half`@135 are kept as the
   saturation/collapse documentation.
 - **The frozen-random-GRU term is bistable around the collapse transition.** λ9 → dose 0.401 with
-  the latent collapsed to 4–5 units; λ22 → dose 2.37 with the latent held **wide open at 69–114
+  the latent collapsed to 4–5 units; λ22 → dose 2.37 with the latent held **wide open at 69–116
   units** (unattainable targets block pruning). No λ stably delivers dose 1.0. Deviation from the
   pre-registered recalibrate-rule, stated: instead of a third iteration onto a knife edge, frozen is
   reported at **two dose points bracketing the target (0.40 / 2.37)** — and they split: the
@@ -110,13 +119,19 @@ best-rounded) implementation of it, uniquely holding pulsating at par.
 
 Three readings:
 
-1. **The v1 equivalence does not transfer.** On every asteroseismic/transfer probe `fwd_bwd` leads
-   the whole ladder — numax_hon +0.047…+0.063 over the best rung (>2·SE vs both frozen arms and vs
-   off; ~1.8·SE vs linear only because linear's seed spread is huge), rotation_period +0.073,
-   solar_like_osc +0.032 — with a consistent sign across the block. The learned recurrent predictor
-   is replaceable for in-distribution v1 probes and **not replaceable for transfer**.
+1. **The v1 equivalence does not transfer.** `fwd_bwd` is numerically ahead of every rung on five of
+   the six claimable probes, never significantly behind any of them, and significantly ahead of the
+   best competing rung on two: numax_hon +0.047 ± 0.007 and solar_like_osc +0.032 ± 0.010 (Holm
+   across the six probes leaves the same two). `ijspeert` is a dead tie with wide-frozen
+   (−0.0003 ± 0.0101), and the rotation_period and osc_giant margins over `linear` are swamped by
+   linear's own seed spread. The sign is consistent across the block. The learned recurrent predictor
+   is replaceable for in-distribution v1 probes and **the best available choice for transfer**,
+   significantly so on two probes. (Audited seed-paired in `src/notebooks/exp08_diagnostics.ipynb`
+   §E; per-probe deltas and SEs in `exp08_menu_paired_se.csv`. The earlier phrasing, "on every
+   transfer probe the GRU leads the entire ladder", was read from unpaired per-cell sds and does not
+   survive the paired redo.)
 2. **Linear is unstable out of distribution** (numax sd 0.087, rotation_period sd 0.123 — the same
-   4–29 active-unit seed instability its dose-gate row showed). The GRU's sd on numax is 0.003.
+   4–28 active-unit seed instability its dose-gate row showed). The GRU's sd on numax is 0.003.
 3. **The collapsed smooth arms are catastrophic on the menu** — numax 0.287, *far below the
    untrained floor* (0.425): over-pressured slowness destroys transferable content, not just probe
    score.
@@ -124,8 +139,8 @@ Three readings:
 This section amends the verdict's emphasis rather than its logic: the smoothness objection stays
 answered (G-prior FAIL), the mechanism stays "unsatisfiable prediction pressure" (v1 + signature),
 **and the learned recurrent implementation earns its keep on the downstream menu** — which is where
-the ML4PS transfer story lives. The GRU is not merely best-rounded; it is the only arm whose gains
-survive out of distribution.
+the ML4PS transfer story lives. The GRU is the best-rounded arm, and the only one whose gains are
+significant out of distribution on more than one probe.
 
 ## Deviations from the locked design, complete list
 
@@ -145,3 +160,7 @@ survive out of distribution.
 - Signature: `exp08_signature_{channel_probe,dynunits_cca,dynunits_residual,dynunits_scaling}.csv`
   (`analyze_exp07_mu_channel.py --pairs`, extended this experiment with `--pairs`/`--no-feature-map`).
 - Menu: `exp08_ladder_menu.csv`.
+- Audit: `src/notebooks/exp08_diagnostics.ipynb` (39 PASS / 2 DRIFT / 0 FAIL against this file) and its
+  precompute `analyze_exp08_diagnostics.py`; paired per-probe deltas and SEs in
+  `exp08_menu_paired_se.csv` (`block=v1|menu`), shipped epochs in `exp08_diag_selection.csv`, cache
+  provenance in `exp08_diag_cache_fingerprint.csv`.

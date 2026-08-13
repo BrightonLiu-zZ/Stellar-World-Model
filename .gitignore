@@ -17,6 +17,7 @@ bulk_download_plan.md
 *.png
 src/notebooks/legacy/
 wandb/
+/.scratch/
 .pytest_cache/
 results/
 experiments/**/packed/

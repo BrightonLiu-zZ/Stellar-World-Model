@@ -530,6 +530,42 @@ Both are **specification defects in the measurements that killed the framing**, 
   does not reproduce the oscillation — any recovered framing must be about the *latent*, never about
   reconstruction fidelity.
 
+### Amendment 2026-08-17 (roadmap Y16) — answering Yue Ma's normalisation objection
+
+She objected (2026-08-13): *"why not solve this with normalisation? it is only a linear transform, and
+getting smaller does not mean memory was lost."* Three parts to the reply, and the third is a
+correction to how **we** have been summarising this result.
+
+**1. The remedy does not work.** `A` is fitted to minimise prediction MSE, so |λ| ≈ 0.34–0.41 is
+**optimal shrinkage** — it says each latent direction is only ~12–17 % predictable one step ahead.
+Rescaling `A` to |λ| = 1 would strictly *worsen* the predictor. The contraction is a measurement of
+predictability, not a gauge choice, so it cannot be normalised away.
+
+**2. Her underlying distinction is real, and this record already makes it.** Phase transport lives in
+**θ**, persistence in **r**. Of the three pre-registered gates, **both that fail are r-gates**
+(O1 existence 0/12, O2 persistence 0/12) and **the one θ-gate PASSES 12/12** (O3). The in-band complex
+modes carry **61.3 %** of the µ mass with median |λ| ≈ 0.34. So the map *does* rotate; what it does not
+do is *persist*.
+
+**3. What is actually overclaimed is our one-line summary, not the analysis.** The call script and the
+Yue Ma notebook said *"zero of twelve arms pass"*, which states the conjunction as though every gate
+failed. O3 passed. The verdict survives because O3 was discounted on grounds recorded **before** she
+raised the objection (see the bullet below): the seed-agreement half is matched by the random null
+6/6, and the real θ non-uniformity concentrates at **θ < 0.3 rad** — the slow quasi-real direction,
+i.e. the smoother's own direction rather than an oscillation peak.
+
+**Phrasing to use from now on.** Not *"zero of twelve pass"* and not bare *"a smoother"* — a smoother
+implies non-rotating contraction, and 61 % of the mass is in rotating modes. Say instead:
+
+> The map **rotates but does not persist**: most of the latent mass sits in complex modes whose implied
+> periods fall in the resolvable band, and they retain about a third of their amplitude per 8.5-hour
+> step, so phase cannot be carried across a sequence. It is a **contracting rotator**, not a phase
+> transporter — and the contraction is the optimal-shrinkage solution, not a removable scale.
+
+Also already on record and worth saying to her unprompted: non-normality is **measured** (0.13–0.15)
+and transient amplification is explicitly **not excluded**, which pre-empts the sharper form of her
+objection. R4 must carry this phrasing; the substantive verdict is unchanged.
+
 ### Verdict — test 1 RUN 2026-08-11 (R11): **FAIL, the linear map is a smoother**
 
 `experiments/analyze_exp08_linear_eigen.py` → `exp08_linear_eigen{,_summary,_gates}.csv`,

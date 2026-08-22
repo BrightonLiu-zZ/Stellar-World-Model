@@ -1,0 +1,70 @@
+# @package _global_
+# GENERATED FROM experiments/configs/exp09_loss_exploit_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
+# exp09_loss_exploit_ladder cell exp09_dpss_impulse_w0p0125 (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp09_dpss_impulse_w0p0125/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+# P8, pre-registered 2026-08-21 before wave 4 ran. Read as a SEVEN-point curve w = 0 / 0.0125 / 0.025 / 0.05 / 0.10 / 0.20 / 0.30 with five points already measured. P8a: a weight reaches severity <= 1.5 AND passes G9-noregress on all 4 v1 tasks at BOTH readouts -> the FIRST cell in exp09 to clear both gates. The recipe question reopens and the spine-switch rule is re-examined. Requires the user's visual sign-off on a fresh random sample before it is called a pass; the number never passes alone. Note the wave-3 `mean_std` margins were thin (w0p05 eb and pulsating both at -0.97x the 2SE line), so a P8a claim must be checked against mean_std explicitly rather than carried on `mean`. P8b: severity <= 1.5 is reached but the probe fails there -> the gate crossing and the probe cliff are the SAME point. The two gates are then provably mutually exclusive on this axis, which CLOSES the exp09 question rather than leaving it open: no weight of this objective can be both clean and useful. P8c: both cells still read > 1.5 while passing the probe -> the crossing sits below w = 0.0125, i.e. arbitrarily close to zero pressure, and severity <= 1.5 effectively requires no spectral term at all. Stop bisecting; the interval is exhausted and the trade-off stands as a threshold at w -> 0. G9-dose is expected to pass: lambda=60 held across 0.00-0.30 (0.691-0.900) and these weights are INTERIOR to that measured range. Any cell outside [0.6, 1.4] has its row declared void, not reinterpreted. Report with `mean` headline, `mean_std` second.
+
+exp_name: exp09_dpss_impulse_w0p0125
+data:
+  seq_len: 16
+  window: 256
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd_bwd
+train:
+  lambda_dyn: 60
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.0
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-06
+  max_epochs: 100
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  track_recon_only_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: combined
+    weight: 0.0125
+    psd_normalize: false
+    psd_eps: 1.0e-08
+    hf_weight: 1.0
+    psd_window: dpss
+    mask_frac: 0.0
+    mask_span: 8
+    psd_taper_nw: 4.0
+    psd_taper_k: 7
+    spectral_floor: null
+  impulse_penalty_weight: 0.1
+  augment:
+    hf_noise_sigma: 0.0
+    hf_noise_min_uhz: 1000.0
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

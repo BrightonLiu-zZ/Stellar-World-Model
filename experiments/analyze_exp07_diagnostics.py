@@ -109,6 +109,29 @@ def ckpt_path_of(cell: str, seed: int, variant: str, ckpt: str) -> Path:
     return ROOT / "experiments" / cell / "models" / f"{variant}_seed{seed}" / f"{ckpt}.pt"
 
 
+def untrained_ref_ckpt(cells: list[str], variant: str, ckpt: str) -> Path:
+    """
+    Find a checkpoint to read the ARCHITECTURE spec from when building the untrained reference.
+
+    The untrained arm never loads weights -- it only needs cfg["model"] (enc_channels, kernel_size,
+    z_dim, gru_hidden, gru_layers), which is identical across every cell in these experiments. The
+    original code read it from a hardcoded EXTENSION_CELLS[0] using the CALLER'S ckpt name, so any
+    experiment introducing a new checkpoint name (exp09's best_recon_only.pt) crashed on a cell that
+    has never heard of it. Prefer a cell actually being scored, then fall back through the checkpoint
+    names that every historical run carries. Fail loud rather than silently scoring a different arm.
+    """
+    candidates = [*cells, *EXTENSION_CELLS]
+    for cell in candidates:
+        if cell.startswith("untrained"):
+            continue
+        for name in (ckpt, "best_recon_aux", "best"):
+            for seed in (0, 1, 2, 3, 4, 5):
+                path = ckpt_path_of(cell, seed, variant, name)
+                if path.exists():
+                    return path
+    raise FileNotFoundError(f"no checkpoint found to source the untrained architecture from: {candidates}")
+
+
 # ----------------------------------------------------------------------------------------------------
 # stage: mu - star-level pooled mu for every run, cached so the downstream stages need no GPU
 # ----------------------------------------------------------------------------------------------------
@@ -145,7 +168,7 @@ def pool_blocks(mu_blocks: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def cache_mu(cell: str, seed: int, variant: str, ckpt: str, device: str,
-             blocks: dict, tics: dict, cache_dir: Path) -> Path:
+             blocks: dict, tics: dict, cache_dir: Path, arch_cells: list[str] | None = None) -> Path:
     """
     Encode one run's first-segment bags and store the star-level pooled mu.
     Cached because `subspace` and `stars` both need every run's mu and re-encoding 24 runs for each
@@ -155,7 +178,7 @@ def cache_mu(cell: str, seed: int, variant: str, ckpt: str, device: str,
     if out_path.exists():
         return out_path
     if cell.startswith("untrained"):
-        ref_ckpt = torch.load(ckpt_path_of(EXTENSION_CELLS[0], 0, variant, ckpt),
+        ref_ckpt = torch.load(untrained_ref_ckpt(arch_cells or [], variant, ckpt),
                               map_location="cpu", weights_only=False)
         mc = ref_ckpt["cfg"]["model"]
         model = _make_untrained(list(mc["enc_channels"]), int(mc["kernel_size"]), int(mc["z_dim"]),
@@ -443,7 +466,7 @@ def run_mu_stage(cells: list[str], seeds: list[int], variant: str, ckpt: str, de
         for seed in seeds:
             jobs.append((cell, seed))
     for cell, seed in tqdm(jobs, desc="mu cache", total=len(jobs)):
-        cache_mu(cell, seed, variant, ckpt, device, blocks, tics, cache_dir)
+        cache_mu(cell, seed, variant, ckpt, device, blocks, tics, cache_dir, arch_cells=cells)
 
 
 def run_spectral_stage(cells: list[str], seeds: list[int], variant: str, ckpt: str, device: str,

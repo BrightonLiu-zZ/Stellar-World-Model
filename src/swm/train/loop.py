@@ -15,7 +15,10 @@ from swm.data.dataset import SeqWindowDataset
 from swm.models import WorldModel
 from swm.train.losses import (
     dynamics_loss,
+    hf_noise_augment,
+    hf_noise_min_bin,
     hf_time_loss,
+    impulse_penalty_loss,
     kl_free_bits,
     make_keep_mask,
     recon_loss,
@@ -69,19 +72,38 @@ def additive_aux_loss(recon: torch.Tensor, target: torch.Tensor, aux_cfg: DictCo
     log_psd term and hf_weight-scaled hf_time term into one general (pretrain-once) objective.
     The masked and none types add nothing here (masked corrupts the input upstream and still uses the plain
     time-MSE), so this returns a zero scalar for them.
+    exp09 adds two knobs, both inert by default so exp00-08 configs stay bit-identical: psd_window="dpss"
+    routes the taper family (psd_taper_nw / psd_taper_k), and spectral_floor clamps the SPECTRAL SUB-TERM
+    from below.
     """
     # recon, target: (B, S, window, 1)
     atype = aux_cfg.type
     window_fn = str(aux_cfg.get("psd_window", "none")) # .get keeps pre-exp07 configs/checkpoints valid
+    taper_nw = float(aux_cfg.get("psd_taper_nw", 4.0)) # dpss only; inert otherwise
+    taper_k = int(aux_cfg.get("psd_taper_k", 7))
+
+    def _spectral() -> torch.Tensor:
+        """Spectral sub-term, with the exp09 floor applied if one is configured."""
+        value = spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize),
+                                    eps=float(aux_cfg.psd_eps), window_fn=window_fn,
+                                    taper_nw=taper_nw, taper_k=taper_k)
+        floor = aux_cfg.get("spectral_floor", None)
+        if floor is None:
+            return value
+        # Clamping from below zeroes the gradient once the term is at or under the floor, so the
+        # optimizer has nothing to gain by driving it further -- which is the whole point: below the
+        # floor, further reduction is only purchasable by planting an impulse. The floor is MEASURED by
+        # impulse ablation on the frozen recipe (roadmap Y9-F), never guessed, and it applies to the
+        # spectral piece ALONE because exp07 pre-check C1 measured the spectral sub-term as the entire
+        # effect (hf_time moved only -0.5 to -4% under the same ablation).
+        return torch.clamp(value, min=float(floor))
+
     if atype == "log_psd":
-        return spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps),
-                                   window_fn=window_fn)
+        return _spectral()
     if atype == "hf_time":
         return hf_time_loss(recon, target)
     if atype == "combined":
-        spectral = spectral_recon_loss(recon, target, normalize=bool(aux_cfg.psd_normalize), eps=float(aux_cfg.psd_eps),
-                                       window_fn=window_fn)
-        return spectral + float(aux_cfg.hf_weight) * hf_time_loss(recon, target) # one objective over all bands
+        return _spectral() + float(aux_cfg.hf_weight) * hf_time_loss(recon, target) # one objective over all bands
     return torch.zeros((), device=recon.device) # none, masked
 
 
@@ -106,7 +128,19 @@ def run_epoch(
     aux_cfg = cfg.train.recon_aux
     aux_weight = float(aux_cfg.weight)
     window = int(cfg.data.window)
-    sums = {"recon": 0.0, "aux": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "mu_var": 0.0, "total": 0.0}
+    imp_weight = float(cfg.train.get("impulse_penalty_weight", 0.0)) # exp09; 0.0 = inert
+    # exp09 band-limited HF-noise augmentation. TRAIN SPLIT ONLY: noising validation would make
+    # val/recon incomparable across cells, and val/recon is both the checkpoint selector and the
+    # x-axis of the G9-select gate. Sigma 0.0 (the default) leaves every pre-exp09 run bit-identical.
+    aug_cfg = cfg.train.get("augment", None)
+    noise_sigma = float(aug_cfg.get("hf_noise_sigma", 0.0)) if aug_cfg is not None else 0.0
+    noise_min_bin = (
+        hf_noise_min_bin(window, float(aug_cfg.get("hf_noise_min_uhz", 1000.0)))
+        if aug_cfg is not None and noise_sigma > 0.0
+        else 0
+    )
+    sums = {"recon": 0.0, "aux": 0.0, "imp": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "mu_var": 0.0,
+            "total": 0.0}
     kl_dim_sum = torch.zeros(cfg.model.z_dim)
     n_batches = 0
 
@@ -116,6 +150,8 @@ def run_epoch(
     with grad_context:
         for batch_idx, x in enumerate(tqdm(loader, desc="train" if train else "val", total=len(loader), leave=False)):
             x = x.to(device, non_blocking=True) # (B, S, window, 1)
+            if train and noise_sigma > 0.0:
+                x = hf_noise_augment(x, noise_sigma, noise_min_bin) # noise the SAMPLE: input and target together
             x_in = x
             if aux_cfg.type == "masked":
                 keep = make_keep_mask(x.shape[0] * x.shape[1], window, float(aux_cfg.mask_frac), int(aux_cfg.mask_span), device)
@@ -133,7 +169,14 @@ def run_epoch(
                 else: # smooth mode (exp08): dynamics-free first-difference penalty under the same lambda
                     dl = smoothness_loss(out["mu_seq"])
                 al = additive_aux_loss(out["recon"], x, aux_cfg)
-                loss = rl + aux_weight * al + beta * kl_loss + cfg.train.lambda_dyn * dl
+                # exp09 impulse penalty carries its OWN weight and its own logged channel rather than
+                # riding inside `aux`, so val/aux stays comparable across cells and the penalty gets
+                # independent dose accounting.
+                ip = (
+                    impulse_penalty_loss(out["recon"], x) if imp_weight > 0.0
+                    else torch.zeros((), device=out["recon"].device)
+                )
+                loss = rl + aux_weight * al + imp_weight * ip + beta * kl_loss + cfg.train.lambda_dyn * dl
             if train:
                 scaler.scale(loss / accum).backward()
                 if (batch_idx + 1) % accum == 0:
@@ -144,6 +187,7 @@ def run_epoch(
                     optimizer.zero_grad()
             sums["recon"] += float(rl)
             sums["aux"] += float(al)
+            sums["imp"] += float(ip)
             sums["kl_total"] += float(kl_total)
             sums["kl_loss"] += float(kl_loss)
             sums["dyn"] += float(dl)
@@ -208,6 +252,16 @@ def train(cfg: DictConfig) -> None:
     # term; only the indicted KL term is excluded). Default false reproduces exp00-02 exactly.
     track_select = bool(cfg.train.get("track_recon_aux_best", False))
     best_select_path = out_dir / "best_recon_aux.pt"
+    # exp09 THIRD checkpoint (roadmap decision A3). exp09's sweep axis IS the aux term, so
+    # `val/monitor_recon_aux` differs in every cell and cells would otherwise be compared at checkpoints
+    # chosen by five different rules -- the same problem exp05 solved on the dynamics axis with
+    # select_include_dyn. best_recon_only.pt is selected on an AUX-INDEPENDENT metric so the aux axis is
+    # not confounded with the selection rule. Both are shipped, and their difference is reported, because
+    # per-epoch checkpoints do not exist and the reused exp07 ladder ends therefore cannot be re-selected
+    # without retraining. Default false leaves exp00-08 untouched.
+    track_recon_only = bool(cfg.train.get("track_recon_only_best", False))
+    best_recon_only_path = out_dir / "best_recon_only.pt"
+    best_recon_only = float("inf")
 
     wandb.init(
         project=cfg.train.wandb.project,
@@ -279,10 +333,13 @@ def train(cfg: DictConfig) -> None:
             va["recon"] + float(cfg.train.recon_aux.weight) * va["aux"]
             + (float(cfg.train.lambda_dyn) * va["dyn"] if include_dyn else 0.0)
         )
+        # exp09 aux-independent selection metric: the same fit terms with the aux dropped entirely, so a
+        # cell that changes the aux term is not also changing its own yardstick.
+        val_recon_only = va["recon"] + (float(cfg.train.lambda_dyn) * va["dyn"] if include_dyn else 0.0)
 
         cur_lr = optimizer.param_groups[0]["lr"] # live lr (tracks the cosine schedule when enabled)
         record = {"epoch": epoch, "beta": beta, "lr": cur_lr, "val/monitor": val_monitor,
-                  "val/monitor_recon_aux": val_select}
+                  "val/monitor_recon_aux": val_select, "val/monitor_recon_only": val_recon_only}
         for key, value in tr.items():
             record[f"train/{key}"] = value
         for key, value in va.items():
@@ -290,8 +347,8 @@ def train(cfg: DictConfig) -> None:
         wandb.log(record, step=epoch)
         log.info(
             f"[{run_name}] ep {epoch} beta {beta} "
-            f"train recon {tr['recon']} aux {tr['aux']} KL {tr['kl_total']} dyn {tr['dyn']} "
-            f"val recon {va['recon']} aux {va['aux']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
+            f"train recon {tr['recon']} aux {tr['aux']} imp {tr['imp']} KL {tr['kl_total']} dyn {tr['dyn']} "
+            f"val recon {va['recon']} aux {va['aux']} imp {va['imp']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
         )
 
         # Advance the LR schedule BEFORE checkpointing so the stored scheduler state matches the lr the
@@ -302,10 +359,13 @@ def train(cfg: DictConfig) -> None:
 
         improved_monitor = epoch >= warmup and val_monitor < best_val # only steady-beta epochs are eligible as best
         improved_select = track_select and epoch >= warmup and val_select < best_select
+        improved_recon_only = track_recon_only and epoch >= warmup and val_recon_only < best_recon_only
         if improved_monitor:
             best_val = val_monitor
         if improved_select:
             best_select = val_select
+        if improved_recon_only:
+            best_recon_only = val_recon_only
         # last.pt is written AFTER the best-value updates so a crash-resume sees the true bests (the old
         # order stored pre-update values, letting a resumed run overwrite best.pt with a worse epoch).
         save_checkpoint(last_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
@@ -313,10 +373,12 @@ def train(cfg: DictConfig) -> None:
             save_checkpoint(best_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
         if improved_select:
             save_checkpoint(best_select_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
+        if improved_recon_only:
+            save_checkpoint(best_recon_only_path, model, optimizer, scaler, epoch, best_val, cfg, best_select=best_select, scheduler=scheduler)
         if epoch >= warmup:
-            # With dual tracking, patience resets while EITHER best improves; stopping on the monitor alone
-            # would kill the run on KL noise while the KL-free metric is still improving.
-            if improved_monitor or improved_select:
+            # With dual tracking, patience resets while ANY tracked best improves; stopping on the monitor
+            # alone would kill the run on KL noise while a KL-free metric is still improving.
+            if improved_monitor or improved_select or improved_recon_only:
                 patience_ctr = 0
             else:
                 patience_ctr += 1

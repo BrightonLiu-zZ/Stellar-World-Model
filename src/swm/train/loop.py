@@ -72,9 +72,10 @@ def additive_aux_loss(recon: torch.Tensor, target: torch.Tensor, aux_cfg: DictCo
     log_psd term and hf_weight-scaled hf_time term into one general (pretrain-once) objective.
     The masked and none types add nothing here (masked corrupts the input upstream and still uses the plain
     time-MSE), so this returns a zero scalar for them.
-    exp09 adds two knobs, both inert by default so exp00-08 configs stay bit-identical: psd_window="dpss"
-    routes the taper family (psd_taper_nw / psd_taper_k), and spectral_floor clamps the SPECTRAL SUB-TERM
-    from below.
+    exp09 adds three knobs, all inert by default so exp00-08 configs stay bit-identical: psd_window="dpss"
+    routes the taper family (psd_taper_nw / psd_taper_k), spectral_floor puts a floor under the SPECTRAL
+    SUB-TERM, and spectral_floor_mode chooses how that floor behaves (clamp = the original exp09 aux_clip,
+    hinge = the Y8 rebuild).
     """
     # recon, target: (B, S, window, 1)
     atype = aux_cfg.type
@@ -90,13 +91,29 @@ def additive_aux_loss(recon: torch.Tensor, target: torch.Tensor, aux_cfg: DictCo
         floor = aux_cfg.get("spectral_floor", None)
         if floor is None:
             return value
-        # Clamping from below zeroes the gradient once the term is at or under the floor, so the
-        # optimizer has nothing to gain by driving it further -- which is the whole point: below the
-        # floor, further reduction is only purchasable by planting an impulse. The floor is MEASURED by
-        # impulse ablation on the frozen recipe (roadmap Y9-F), never guessed, and it applies to the
-        # spectral piece ALONE because exp07 pre-check C1 measured the spectral sub-term as the entire
+        # The floor is MEASURED by impulse ablation (roadmap Y9-F/Y9-G), never guessed, and it applies to
+        # the spectral piece ALONE because exp07 pre-check C1 measured the spectral sub-term as the entire
         # effect (hf_time moved only -0.5 to -4% under the same ablation).
-        return torch.clamp(value, min=float(floor))
+        mode = str(aux_cfg.get("spectral_floor_mode", "clamp"))
+        if mode == "clamp":
+            # Zeroes the gradient once the term is at or under the floor, so the optimizer has nothing to
+            # gain by driving it further. FALSIFIED as a design (P3): a floor on the LOSS is not a floor
+            # on the ACHIEVED value. The flat region has no restoring force, so once reconstruction
+            # improvement incidentally carries the spectrum under the floor the term switches itself off
+            # permanently and the value coasts downward (measured 4.217 against a floor of 5.23).
+            return torch.clamp(value, min=float(floor))
+        if mode == "hinge":
+            # The rebuild (Yue Ma's Y8). Symmetric V about the floor: full descent gradient above it, unit
+            # RESTORING gradient below it, so the floor is an attractor rather than a dead zone and cannot
+            # self-deactivate. Equivalent to value + 2*relu(floor - value) up to the same constant, i.e.
+            # the one-sided relu penalty plus the descent pressure it would otherwise discard -- and that
+            # pressure is not optional: waves 3-4 measured the spectral term's real job as HOLDING THE
+            # LATENT OPEN (every probe failure had a seed at <= 3 active units), which a one-sided penalty
+            # inert above the floor would surrender.
+            # The constant `+ floor` is deliberate: it keeps val/aux on the same scale as the clamp cell,
+            # so the two are directly comparable in W&B, and a constant changes no gradient.
+            return float(floor) + (value - float(floor)).abs()
+        raise ValueError(f"unknown spectral_floor_mode {mode!r}; expected 'clamp' or 'hinge'")
 
     if atype == "log_psd":
         return _spectral()

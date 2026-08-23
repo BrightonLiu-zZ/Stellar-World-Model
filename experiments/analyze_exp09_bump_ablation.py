@@ -86,6 +86,13 @@ CELLS = {
     "exp09_dpss_impulse_w0p05": ("best_recon_only", "dpss"),
     "exp09_dpss_impulse_w0p10": ("best_recon_only", "dpss"),
     "exp09_dpss_impulse_w0p20": ("best_recon_only", "dpss"),
+    "exp09_dpss_impulse_w0p02": ("best_recon_only", "dpss"),      # wave 5a
+    # wave 5b: the hinge rebuild. HANN, not dpss -- the floor these cells are held at was measured
+    # under the hann taper (Y9-F/Y9-G) and spectral values do NOT transfer across tapers, which is
+    # exactly why the rebuild could not ride the wave-2 dpss recipe.
+    "exp09_clip_hinge_f3p23": ("best_recon_only", "hann"),
+    "exp09_clip_hinge_f5p23": ("best_recon_only", "hann"),
+    "exp09_clip_hinge_f7p54": ("best_recon_only", "hann"),
 }
 
 

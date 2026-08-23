@@ -1,0 +1,71 @@
+# @package _global_
+# GENERATED FROM experiments/configs/exp09_loss_exploit_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
+# exp09_loss_exploit_ladder cell exp09_dpss_impulse_w0p02 (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp09_dpss_impulse_w0p02/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+# P9, pre-registered 2026-08-22 before wave 5 ran. The eight-point curve w = 0 / 0.0125 / 0.02 / 0.025 / 0.05 / 0.10 / 0.20 / 0.30, seven points measured. Interpolation between w0p0125 (1.345) and w0p025 (1.553) puts this cell at ~1.48, i.e. just UNDER the gate, which is the whole reason to run it. P9a: severity <= 1.5, G9-noregress passes on all 4 v1 tasks at BOTH readouts, and every seed's dose is in [0.6, 1.4] -> the first cell in exp09 to clear both gates, on the weight axis. Requires the user's visual sign-off on a fresh random sample; the number never passes alone. P9b (EXPECTED): severity <= 1.5 but the probe fails, or a seed collapses and voids the row on dose -> the gate crossing and the probe cliff are the SAME point. P8b's outcome, but demonstrated on a cell that is not itself void, which is what P8b could not do. That CLOSES the weight axis: no weight of this objective is both clean and useful. P9c: severity > 1.5 while the probe passes -> the crossing sits below w = 0.02 and the axis is exhausted. Stop bisecting. COLLAPSE IS THE LIVE RISK, and min-over-seeds n_active is the pre-registered readout (wave 4's separator: every FAIL had a seed <= 3, every PASS all six >= 4). Neighbours measured: w0p025 n_active 6.67 (min 4, dose 0.751), w0p0125 3.33 (min 0.0, VOID). This cell sits between a healthy and a dead one.
+
+exp_name: exp09_dpss_impulse_w0p02
+data:
+  seq_len: 16
+  window: 256
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd_bwd
+train:
+  lambda_dyn: 60
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.0
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-06
+  max_epochs: 100
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  track_recon_only_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: combined
+    weight: 0.02
+    psd_normalize: false
+    psd_eps: 1.0e-08
+    hf_weight: 1.0
+    psd_window: dpss
+    mask_frac: 0.0
+    mask_span: 8
+    psd_taper_nw: 4.0
+    psd_taper_k: 7
+    spectral_floor: null
+    spectral_floor_mode: clamp
+  impulse_penalty_weight: 0.1
+  augment:
+    hf_noise_sigma: 0.0
+    hf_noise_min_uhz: 1000.0
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

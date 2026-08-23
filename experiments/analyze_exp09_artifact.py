@@ -69,6 +69,12 @@ CELLS = {
     "exp09_dpss_impulse_w0p05": "best_recon_only",
     "exp09_dpss_impulse_w0p10": "best_recon_only",
     "exp09_dpss_impulse_w0p20": "best_recon_only",
+    "exp09_dpss_impulse_w0p02": "best_recon_only",     # wave 5a: the last weight point, at the crossing
+    # wave 5b: the clip rebuilt as a two-sided hinge, run at all three floors Y9-G measured, because
+    # under a hinge the floor is an ATTRACTOR and its value is only known to within a factor of 2.3.
+    "exp09_clip_hinge_f3p23": "best_recon_only",
+    "exp09_clip_hinge_f5p23": "best_recon_only",
+    "exp09_clip_hinge_f7p54": "best_recon_only",
     "exp07_hann0p3_fbwd": "best_recon_aux",   # protocol gate: must reproduce centre ~13.5, edge ~1.15
     "exp07_comb0p3_fbwd": "best_recon_aux",   # rectangular contrast: impulse at the EDGE (~31x)
 }

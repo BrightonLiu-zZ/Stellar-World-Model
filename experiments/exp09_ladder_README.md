@@ -1,11 +1,11 @@
 # exp09 — loss-exploit ladder: does closing the channel close the model-selection void?
 
-**Status:** complete through wave 4, 2026-08-21. 60 runs over 10 cells on two axes (mechanism, then amount). `aug_hfnoise` is the one designed cell never run.
+**Status:** complete through wave 5, 2026-08-22. 84 runs over 14 cells on THREE axes (mechanism, amount, level). `aug_hfnoise` is the one designed cell never run.
 **Manifest (single source of truth):** `experiments/configs/exp09_loss_exploit_ladder.yaml`
 **Roadmap:** `docs/roadmap/2026-08-15-post-yue-ma-roadmap.md` (lane M) ·
 **Provenance:** `docs/roadmap/2026-08-15-yue-ma-suggestions-analysis.md` ·
 **ADR:** `docs/adr/0012-recipe-unfreeze-and-probe-boundary.md` ·
-**Diagnostics:** `src/notebooks/exp09_diagnostics.ipynb` (88 cells, executes clean) · **Collaborator pack:** `tmp/exp09_yue_ma_report.ipynb` (44 cells, interactive)
+**Diagnostics:** `src/notebooks/exp09_diagnostics.ipynb` (102 cells, executes clean; section L = the level axis) · **Collaborator pack:** `tmp/exp09_yue_ma_report.ipynb` (44 cells, interactive)
 
 ---
 
@@ -99,8 +99,9 @@ Per-seed note: seed 4 trips the health flag at **4.1** active units against a ce
 first flag anywhere in exp09). It is a width flag, not a failure — that seed posts the cell's *highest*
 `eb` and `rotation` and its lowest `pulsating`. Retained; dropping it would be selecting on an outcome.
 
-> **No cell passes both `G9-artifact` and `G9-noregress`** — now across **eight** attempts on two
-> orthogonal axes (six mechanisms at `w = 0.3`, then five weights of the best mechanism).
+> **No cell passes both `G9-artifact` and `G9-noregress`** — now across **ten** attempts on three
+> orthogonal axes: six mechanisms at `w = 0.3`, then six weights of the best mechanism, then
+> three floors of the rebuilt clip at fixed weight.
 
 ## Findings
 
@@ -283,12 +284,160 @@ population (11 → 16 cells) makes every task *less* anti-correlated — eb +0.1
 −0.345→−0.306, rotation −0.273→**+0.047** (flips sign), transit −0.436→−0.268. Only rotation clears the
 "0.3 less negative" bar, so `G9-select` still fails, but the movement belongs on the record.
 
+## Wave 5 — the last weight point, and the clip rebuilt (2026-08-22, post-hoc, 24 runs, ~10 h)
+
+**Verdict: P9b and P10b. The weight axis is exhausted; the floor axis works as a mechanism and prices
+the trade-off in a new currency; still no cell passes both gates — ten attempts on three axes.**
+
+| | severity | G9-art | achieved | dose (min) | n_active (min) | KL | noregress `mean` / `mean_std` |
+|---|---|---|---|---|---|---|---|
+| `w0p02` | 1.426 | **PASS** | 6.10 | 0.595 (**0.000**) | 4.0 (**0.0**) | 1.19 | **VOID** |
+| `aux_clip` (clamp, 5.23) | 4.763 | fail | 4.199 | 0.826 (0.807) | 5.0 (4) | 1.64 | — |
+| `clip_hinge_f3p23` | 9.962 | fail | 2.815 | 1.009 (0.934) | 11 (4) | 2.05 | fail puls / fail puls |
+| `clip_hinge_f5p23` | 5.629 | fail | 4.883 | 1.095 (1.045) | 35 (19) | 1.77 | **PASS / PASS** |
+| `clip_hinge_f7p54` | **2.712** | fail | 7.079 | 1.082 (1.032) | 53 (37) | 1.58 | fail puls / fail puls |
+
+### P9 — the weight axis is exhausted and *un-settleable*
+
+`w = 0.02` reached severity **1.426**, passing `G9-artifact` exactly as the interpolation predicted. It
+is nonetheless **void**: one seed ended at 0.0 active units, dose 0.0000. Same fate as `w0p0125`.
+
+So across all eight weight points, exactly **one** cell clears `G9-artifact` with a valid dose —
+`aux_none` (1.172, dose 0.691) — and that one regresses on the probe. Every weight strictly between
+`aux_none` and `w0p025` that reaches the gate does so only by killing a seed, which voids it. **There is
+no weight of this objective that is simultaneously clean, useful and valid.**
+
+*Do not quote w0p02's probe row either way.* At `mean` it technically passes `G9-noregress` while
+improving 0 of 4 and posting eb 0.743 against 0.773–0.785 for every non-void cell — it passes by being
+too **noisy** to fail, since the dead seed inflates every paired SE 3–8× versus the hinge cells. The
+2·SE rule is permissive exactly where a cell is collapsing.
+
+### P10 — the hinge works; the pre-registered mechanism gate was the wrong *shape*
+
+Scored as written, **P10-mech fails**: the 10% band holds at 5.23 (0.934) and 7.54 (0.939) but not at
+3.23 (0.871).
+
+I proposed a rescue — that the *offsets* are constant (0.415 / 0.347 / 0.461), the fixed-slope L1
+equilibrium signature — and then **withdrew it**, which turned out to be the more useful result. That
+reading came from the median; the mean disagrees (0.441 / 0.327 / 0.072), and the per-seed table
+settles it:
+
+```
+offset below the floor, per seed
+  3.23   0.403  0.598  0.548  0.332  0.428  0.340    sd 0.109   6/6 below
+  5.23   0.602  0.768  0.637 -0.132 -0.003  0.092    sd 0.385   4/6 below
+  7.54   0.506  0.370  2.359  1.129 -4.346  0.416    sd 2.292   5/6 below
+
+within-cell sd 0.929   vs   between-cell sd 0.057   ->   ratio 16x
+```
+
+`f7p54` has a seed that finished at achieved **11.886** against a floor of 7.54. A quantity whose
+scatter *within* a cell is sixteen times its variation *between* cells is not a constant, and the
+median was hiding it.
+
+**What is true is narrower:** the hinge's grip is tight at the low floor and loosens monotonically —
+the floor controls the level only while it sits near what the model reaches unaided (`hann0p3` gets to
+1.974). Note severity moves the *other* way: its seed spread **tightens** as the floor rises
+(4.15 → 3.02 → 0.76), so the floor controls the artifact better than it controls the achieved value.
+
+The clamp control is untouched and still decisive: 1.031 under its own floor as a **runaway**, since a
+clamp has no restoring force once it engages. **P3's self-deactivation is fixed** — the hinge is a
+working mechanism with a measured operating range, not a working mechanism full stop.
+
+**P10b confirmed.** Severity falls monotonically as the floor rises, 9.96 → 5.63 → 2.71, and the purchase
+measured at the bumps falls with it, +139.9% → +45.5% → +17.4% (`hann0p3` +167.5%). Severity's seed
+spread collapses too, 4.15 → 3.02 → 0.76. The artifact is now priced in **achieved-spectral units at
+constant pressure** — the measurement waves 3–4 could not make, because there the weight moved pressure
+and level together.
+
+**P10a not reached, and the two ends fail differently.** `f5p23` passes `G9-noregress` at *both* readouts
+(eb +0.0103 ± 0.0048, rotation +0.0040 ± 0.0098) but reads 5.629 on artifact. `f7p54` gets artifact to
+2.712 and improves 3 of 4 at `mean` — but fails noregress on **pulsating** (−0.0284 ± 0.0119). Pulsating
+is the single blocker at the clean end, which is mechanically coherent: holding the spectrum *above* its
+free level is exactly the intervention a spectral task should pay for.
+
+### The second pre-registration is refuted, and it narrows the wave-3/4 story
+
+`n_active` does reverse — 5.0 under the clamp → 11 / 35 / 53 — far past the ~10.5 predicted. **But the
+extra units carry nothing.** Total KL is 2.05 / 1.77 / 1.58, flat and even *below* `aux_dpss_impulse`'s
+2.56, so KL-per-active-unit falls to 0.058 and 0.031 against 0.20–0.38 for every other cell. The width is
+**dilution, not capacity**. Across all 14 exp09 cells: ρ(eb, n_active) = +0.213 (p 0.46), ρ(eb, KL total)
+= −0.095 (p 0.75), ρ(eb, KL/unit) = +0.011 (p 0.97).
+
+⇒ "the spectral term's value is that it **holds the latent open**" must be narrowed to "**avoiding total
+collapse** matters; width above that does not." The wave-4 separator was always a statement about
+catastrophic seeds (≤ 3 units), never a continuous driver — and with 14 cells it is now measured not to
+be one. **`n_active` must not be reported as a quality metric.**
+
+### Method debt found by the data
+
+The ablation script's `asymmetry` column (bump % ÷ random %) **breaks** on floored cells: it reads −4.07
+and −1.16 because the *random control* goes negative (−11.2%, −15.0%), not because the bump term does
+(it stays +45.5% and +17.4%). Nulling ordinary residual *improves* the spectral term in a model held
+above its free spectral level — honest-residual behaviour, and a sign the ratio was never designed for.
+**Report the two components separately for any floored cell**; the ratio is interpretable only while the
+control is positive.
+
+### Y9-G, the pre-check that reshaped the design (no GPU, no retraining)
+
+Before spending a night on a rebuilt clip, the floor it would be pinned to was re-read for every cell
+that trains under the **same Hann taper**, from the ablation CSV already on disk:
+
+| cell | impulse-free spectral | seed spread | achieved |
+|---|---|---|---|
+| `exp09_aux_impulse_pen` | **3.23** | 11% | 1.979 |
+| `exp07_hann0p3_fbwd` | **5.23** ← Y9-F's published value | 41% | 1.974 |
+| `exp09_aux_clip` | **7.54** | 85% | 4.199 |
+| `exp09_aux_none` | 63.04 | — | (no spectral term) |
+
+**The floor is not a task constant — 82.5% spread across cells.** The diagnostic pair is
+`aux_impulse_pen` vs `hann0p3`: they train to the *same* achieved spectral (1.979 vs 1.974) yet their
+impulse-free values differ 1.6×, because the kurtosis penalty left less impulse to remove. So
+`log_psd_ablated` measures "what **this** model scores without **its** impulse", not a universal honest
+level — and seed spread tracks the same thing, since the less a model cheats the tighter its estimate.
+
+This matters *only* under the rebuild. Under `clamp` a wrong floor is harmless (the term merely engages
+early or never). Under a hinge the floor is an **attractor**, so a floor above the honest level *forces*
+the model to reconstruct worse than it could. A quantity known to within a factor of 2.3 cannot be
+hard-coded into an attractor — hence a three-point ladder over the measured values, not one cell.
+
+### What runs
+
+`spectral_floor_mode: hinge` = `floor + |spectral − floor|`, a symmetric V. Above the floor it is the
+unmodified spectral term; below it the gradient mirrors and pulls back up. It cannot self-deactivate,
+which is the P3 failure. **Not** the bare `relu(floor − spectral)`: that is inert above the floor, and
+untrained spectral is ~64 against a floor of ~5, so the spectral term would contribute nothing for most
+of training — surrendering exactly what waves 3–4 measured as its real job (holding the latent open).
+
+| cell | knob vs its reference | why |
+|---|---|---|
+| `exp09_dpss_impulse_w0p02` | `w0p025` + `weight 0.02` | the crossing is bracketed at ≈0.021; last point worth spending |
+| `exp09_clip_hinge_f5p23` | `aux_clip` + `mode: hinge` | clean one-knob contrast: isolates self-deactivation from the floor's value |
+| `exp09_clip_hinge_f3p23` | `f5p23` + `floor 3.23` | the least-cheating model's estimate — best guess at the honest level |
+| `exp09_clip_hinge_f7p54` | `f5p23` + `floor 7.54` | deliberately over-high: prices what a too-high attractor costs |
+
+**Why this is the measurement waves 3–4 could not make.** The V pins the *achieved* spectral value while
+the aux weight stays at 0.3. The weight ladder could only move the achieved value by lowering the weight,
+which simultaneously lowered the pressure and collapsed the latent — three things at once, which is why
+the probe cliff could not be attributed. Here pressure is constant and only the target level moves.
+
+**A correction to this repo's own reasoning, found while setting the priors.** "Holding the weight at 0.3
+keeps the latent open" is *not* automatic: `aux_clip` ran at 0.3 and still ended at n_active **5.0**
+(min 4), against `aux_impulse_pen`'s **10.5** (min 6) on the same base at the same weight, and
+`aux_none`'s 4.33. The difference is that `aux_clip`'s term went dead at epoch ~81–86. So if the hinge
+keeps the term live for all 100 epochs, that narrowing should **reverse** toward ~10 — a falsifiable
+mechanism check independent of both gates. λ = 60 is carried unchanged, now bracketed by measured doses
+on the same Hann base (`aux_clip` 0.826, `aux_impulse_pen` 1.005) rather than extrapolated.
+
+**Pre-handoff verification.** `long_run_guard` forbids training as a Claude Code job, so the exact-command
+smoke was not possible; instead all four cells were composed exactly as the runner composes them and
+driven through `run_epoch` on synthetic data, covering both hinge branches (above-floor identity across
+the three floors; below-floor value, live gradient, and the restoring branch reaching the loop). 8 new
+unit tests, 102 in the suite, all green.
+
 ## Not done
 
-`aug_hfnoise` (needs its σ pilot — and see below) · an `off` arm for the winning cell · a
-`relu(floor − spectral)` rebuild of the clip (P3 falsified the hard clamp — it self-deactivates, so it
-must not be stacked with anything until rebuilt) · **`w = 0.02`**, the one cell that would settle
-whether *any* weight clears both gates, since the crossing is bracketed at ≈ 0.021 · more seeds at
+`aug_hfnoise` (needs its σ pilot — and see below) · an `off` arm for the winning cell · more seeds at
 `w = 0.025` (eb sits at +0.93× the 2·SE line; 12 seeds would settle whether the spine-switch rule fires
 on a second task).
 

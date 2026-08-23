@@ -60,6 +60,7 @@ train:
     psd_taper_nw: 4.0
     psd_taper_k: 7
     spectral_floor: 5.23
+    spectral_floor_mode: clamp
   impulse_penalty_weight: 0.0
   augment:
     hf_noise_sigma: 0.0

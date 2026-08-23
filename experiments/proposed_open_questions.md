@@ -17,6 +17,7 @@ Append new candidates at the next free ID. Do not renumber; ledger IDs are perma
 | **Q14** | `eb` has no in-window coverage filter (no ADR-0009 analogue) | label hygiene | zero-GPU, one CPU fold pass |
 | **Q15** | encoder-capacity arms (`z32`/`whalf`) parked at exp04, never re-tested on the frozen recipe | architecture, parked lever | **one overnight GPU wave + a pilot** |
 | **Q16** | can *"the latent learns the physics"* be saved as a claim, and what would it take? | framing / claim-level | zero-GPU for 4 of 5 tests |
+| **Q17** | can the encoder recover rotation periods it never sees a full cycle of — and rotators TARS missed? | **astrophysics question, external origin** | limb A zero-GPU; limb B needs a protocol |
 
 Q13 and Q14 share a shape: **a documented rule the probe path does not implement.** Neither changes
 any *paired* delta (both arms of every ablation share the defect) and neither is a bug in the model —
@@ -620,6 +621,84 @@ to a mechanism sentence. Tests 2–4 remain open (R15/R9b).
 
 ---
 
+## Q17 — can the encoder recover rotation periods it never sees a full cycle of, and rotators TARS missed?
+
+**Status:** open · **external origin** (Prof. Theissen, Slack 2026-08-19/20) · two limbs, one cheap and
+one blocked on a protocol · **first entry in this file aimed at an astrophysics question rather than at
+the representation**
+
+### Where it came from
+
+Asked to name a TESS-appropriate astrophysics question, he gave two — *"find more planets"* and
+*"measure rotation periods below what is already done, potentially try to measure rotation periods
+longer than the time baseline of observations"* — then said rotation is the one he is most interested
+in ("a lot of other people are working on #1 and it's pretty saturated"), citing **Boyle, Bouma & Mann
+2026, ApJS 284, 75** ([arXiv:2603.05586](https://arxiv.org/abs/2603.05586)), the TESS All-Sky Rotation
+Survey: 1,046,317 stars, T < 16, within 500 pc, FFI-based, ~93% of periods believed rotational,
+reliable recovery to 25 d from a single sector with a half-period-alias correction.
+
+### The finding that makes this non-obvious
+
+**TARS is our rotation label source** ([`docs/labels-sources.md`](../docs/labels-sources.md) §TARS,
+`tars_table_2.feather`). The catalogue he named as the bar is the catalogue our ground truth comes
+from. Three consequences, none of them cosmetic:
+
+- Our rotation score measures **agreement with TARS**. Perfect agreement *is* TARS. The current
+  evaluation cannot in principle demonstrate "below what is already done."
+- A star the model calls a rotator that TARS does not is scored **as a false positive today**. The
+  detections the question asks for are currently counted as errors.
+- The mechanism is already written down: absence from TARS means *"no detectable rotation period in a
+  single-sector TESS baseline"* — detection incompleteness, which "caps the achievable upper bound"
+  (`labels-sources.md`, known-limitations §Rotation).
+
+### Limb A — beyond the *model's* baseline · cheap, evaluable now
+
+Two different baselines are being conflated by the phrase "longer than the time baseline":
+
+| baseline | length | status |
+|---|---|---|
+| TARS's *observation* baseline | one sector, ~27 d (recovers to 25 d) | beating it needs multi-sector stitching — a project CLAUDE.md hard constraint forbids it; would require an ADR |
+| **the model's *input* baseline** | **one sequence, 5.69 d** | **TARS labels span 0.5–25 d, so labels already exist for periods no tensor the encoder sees contains one full cycle of** |
+
+So across roughly **5.7–25 d** we hold labels for a quantity the model cannot directly observe. Can it
+infer them anyway — from harmonic content, spot-evolution statistics, activity proxies? ADR-0004 caps
+v1 rotation metrics at P ≤ 5 d precisely to avoid this regime, and **Q13 proposes enforcing that cap**.
+Q17 is its mirror image; the two must be decided together, or the project will simultaneously tighten
+and deliberately cross the same boundary.
+
+*Controls this limb cannot skip.* The star-level latent is amplitude-dominated (`evr_pc1` 0.926,
+`r2_amp_pc1` 0.967) and activity amplitude correlates with rotation rate, so an **amplitude-only
+baseline is mandatory, not optional** — residualising amplitude already costs rotation 0.558 → 0.424
+(exp06 `mu_probe`). Add the untrained-encoder floor and the A1 engineered-feature ceiling per the
+standing skyline rules. And **Q9 applies**: the v1 quiet stratum excludes rotators, so any v1-subset
+rotation number is partly a general-variability detector — score on R8's `survey_matched` pool too,
+where rotation is the one task whose absolute *rises* (0.431 → 0.495).
+
+*Cost.* Zero training; a stratified re-fit on cached µ.
+
+### Limb B — below TARS's detection threshold · blocked on a protocol
+
+Needs a reference TARS does not provide. Three routes:
+
+1. **Injection–recovery** — inject synthetic spot modulation below TARS's amplitude/period threshold
+   into corpus light curves and measure recovery against a Lomb–Scargle/TARS-like baseline. Shares
+   machinery with the synthetic-injection *selection* protocol already on the table from the Yue Ma
+   call, so it may be paid for once and used twice.
+2. **An independent catalogue** on the overlap (Kepler/McQuillan, ground-based, spectroscopic v sin i).
+3. **Hand-vetting** a sample of model-positive / TARS-null stars.
+
+Available and unused: **`tars_table_4`** (~40 GB) identifies stars TARS *analysed and found no signal
+in* — a high-confidence-negative subset (`labels-sources.md`, "not v1 scope").
+
+### What it changes
+
+Limb A is a direct test of a scope limit we imposed and never checked, and `docs/architecture.md`
+already pre-registers the reading — *"monotonic degradation across buckets is a paper finding in its
+own right."* Either outcome is reportable. Limb B is the version that answers his question **as
+asked**, and it is a v2 programme, not a pre-Aug-29 task.
+
+---
+
 ## Suggested ledger entries
 
 If accepted, add to [open_questions.md](open_questions.md) under the existing status vocabulary and
@@ -630,4 +709,5 @@ delete nothing from this file (it is the evidence trail):
 ## Q14 — eb has no in-window coverage filter (transit's ADR-0009 has no eb analogue) · open · label hygiene
 ## Q15 — encoder-capacity arms (z32/whalf) parked at exp04, never re-tested on the frozen recipe · open · needs a GPU wave + an architecture-lock decision
 ## Q16 — can "the latent learns the physics" be saved? evidence assembled both ways; 4 zero-GPU tests · open · framing
+## Q17 — rotation beyond the model's 5.69 d input baseline (limb A, zero-GPU) and below TARS's detection threshold (limb B, needs a protocol) · open · astrophysics question, external origin; decide together with Q13
 ```

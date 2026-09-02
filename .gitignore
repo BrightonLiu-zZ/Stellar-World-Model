@@ -30,6 +30,10 @@ experiments/exp03_forensics/
 experiments/exp03_eval_cache/
 experiments/exp04_eval_cache/
 experiments/**/*.npz
+# C1/C2 supervised baselines: 66 per-task checkpoints (~450 MB) plus their per-epoch histories. Same
+# status as experiments/**/models/ above; anchored to this one experiment rather than adding another
+# unanchored `runs/` pattern. The committed record is experiments/c1c2_supervised_README.md.
+experiments/c1c2_supervised/runs/
 
 # Generated tabular outputs (result tables, caches, profiles). Numbers live in W&B, the experiment
 # READMEs and docs/STATUS.md; the CSV/parquet themselves are regenerable from the analysis scripts.

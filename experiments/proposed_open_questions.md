@@ -625,7 +625,8 @@ to a mechanism sentence. Tests 2–4 remain open (R15/R9b).
 
 **Status:** open · **external origin** (Prof. Theissen, Slack 2026-08-19/20) · two limbs, one cheap and
 one blocked on a protocol · **first entry in this file aimed at an astrophysics question rather than at
-the representation**
+the representation** · **T0 + T1 done 2026-08-26 — read the addendum at the end of this section first,
+it corrects two statements in the limb-A plan below**
 
 ### Where it came from
 
@@ -697,6 +698,87 @@ already pre-registers the reading — *"monotonic degradation across buckets is 
 own right."* Either outcome is reportable. Limb B is the version that answers his question **as
 asked**, and it is a v2 programme, not a pre-Aug-29 task.
 
+### Addendum, 2026-08-26 — what T1 measured (nothing above is deleted; two things above are now wrong)
+
+T0 and T1 are done (`docs/plans/2026-08-26-tars-circularity-note.md`;
+`src/notebooks/t1_rotation_census.ipynb` + `experiments/t1_rotation_census.csv`). The census changes
+two statements in the limb-A plan written above.
+
+**Correction 1 — "score on R8's `survey_matched` pool too" is not executable as written.**
+`survey_matched` is a **scoring population, not a star set** (`experiments/analyze_r8_fullpool.py`,
+`matched_row`): its positives are only the 2,021-star subset-test split, because positives never
+expand (85% are permanently in probe-train), and its negatives are redrawn per draw to the corpus base
+rate over 20 draws. Scoring limb A "on `survey_matched`" would mean fitting the beyond-baseline
+question on **25 test-split rotators**. The star set that carries the intent is **`r8_scoreable`** =
+corpus-with-windows minus probe train/val = roles `added` + `existing_test` = **108,305** stars, all of
+which already have cached µ in `experiments/r8_fullpool/mu_cache/`. Both terms are now in `CONTEXT.md`.
+
+**Correction 2 — the v1 subset cannot carry limb A at all.** It holds **158** beyond-baseline
+rotators, **25** of them in its test split. It is the contrast row, not a measurement population. Q9's
+confound argument is unaffected and still stands; what changes is that the fix is `r8_scoreable`, not
+`survey_matched`.
+
+**The band is sized, and it is not small.** Rotators past the 5.69 d model input baseline:
+
+| population | 5.7-13 d | >=13 d | beyond-baseline total | TARS-null |
+|---|---|---|---|---|
+| corpus with windows (119,754) | 3,459 | 1,220 | **4,679** | 104,827 |
+| `r8_scoreable` (108,305) | 3,357 | 1,189 | **4,546** | 94,336 |
+| v1 subset (13,470) | 122 | 36 | 158 | 12,332 |
+
+**Three smaller facts for whoever runs T2.**
+
+1. **Buckets adopted:** `<=2 · 2-5.7 · 5.7-13 · >=13 d`. The 08-15 set (`<=2 · 2-5 · 5.7-13 · 13-25`)
+   did not tile — 924 corpus rotators fell in a 5-5.7 d gap. 5.69 d is the physical edge (one sequence
+   = one full cycle), and ADR-0004's 5.0 was a rounded stand-in for it. `n_le_5d` is carried in the
+   census beside the buckets so **T3** still has the exact ADR-0004 population.
+2. **Nothing sits past TARS's reliability limit.** The label file spans 0.1-26.6 d, but restricted to
+   corpus-with-windows the max is 23.6 d, so `n_gt_25d` = 0 in every population. The `>=13 d` bucket is
+   bounded above by the data, not by a choice.
+3. **The band is not uniformly populated.** Counts dip near 7 d, hump at 9-11 d, dip at 15-16 d, hump
+   again at 19-21 d. Real slow-rotator structure and TARS alias structure both predict this and the
+   census cannot separate them — so a per-bucket T2 score is a mixture over the humps, and a
+   monotonic-degradation reading must not be fitted to their edges.
+
+### Addendum, 2026-08-27 — T2 ran. Limb A is ANSWERED, and one framing above needs correcting
+
+T2 is done (`experiments/analyze_t2_beyond_baseline_rotation.py`, write-up
+`experiments/t2_beyond_baseline_README.md`). Nothing above is deleted; two things change.
+
+**The answer to limb A.** Past the 5.69 d input baseline the model knows a star is a slow rotator and
+**cannot say how slow**. Its predicted period saturates at **5.567 d (seed sd 0.122)** for the 5.7-13 d
+bucket and **5.623 d (sd 0.086)** for `>=13 d`, whose true means are 8.60 d and 17.34 d — one answer for
+two buckets differing 2x in truth, landing 2.1% and 1.2% below the input baseline. The ceiling is
+**2.3x above** the training set's 2.40 d unconditional geometric mean, so it is not shrinkage-to-the-mean,
+and the untrained arm shows no common ceiling. That the baseline *causes* the ceiling is suggested, not
+proven; the falsifiable version is below.
+
+**Correction 3 — "an amplitude-only baseline is mandatory" was right, and it fired harder than the text
+above anticipated.** The passage above treats amplitude as a confound to be ruled out. Measured, the
+amplitude control does not merely survive: past the baseline it **outranks the trained latent**
+(Spearman rho 0.270 vs 0.174 at 5.7-13 d; **+0.335 vs -0.080** at `>=13 d`). G-rot nonetheless PASSES,
+because it is written on R2 and R2 in these buckets is a bias statistic — per-arm biases are 0.19-0.63
+dex against bucket target SDs of 0.067-0.093. So the gate's verdict and the gate's *question* come apart,
+and the substantive reading is G-rot's own pre-registered fallback sentence, "the beyond-baseline signal
+is amplitude/activity, not period inference". A gate written before a regime's variance structure is
+measured can pass on a metric that does not discriminate its own hypotheses; that is the transferable
+lesson, and it is why both readings are printed side by side rather than one being chosen.
+
+**Correction 4 — the monotonic-degradation reading is about the global MAP, not the band.** Refitted on
+the beyond-baseline rotators alone, every arm reaches rho 0.27-0.40 and `>=13 d` is **no harder** than
+5.7-13 d. So the band does carry recoverable period information; the global linear readout simply fails
+to use it. The information is also **not SSL-specific** (fbwd over untrained: +0.018 +/- 0.005 and
++0.008 +/- 0.012 ns) and the 25 engineered features beat every mu arm in the band, with fusion adding
+nothing. Point 3 above still stands: the humps are real and no reading should be fitted to bucket edges.
+
+**Q17 limb A status: CLOSED.** Limb B unchanged (blocked on a protocol, v2).
+
+**New question this raises (proposed, not registered):** *does the saturation ceiling move with the
+input baseline?* If the ceiling is set by `seq_len * window_size * cadence`, changing either should move
+it proportionally; if it does not move, the ceiling is a property of the label distribution or the
+readout instead. This is the falsifiable form of the causal claim, it needs GPU, and it would also give
+**T3** a measured basis for choosing between ADR-0004's 5.0 d cap and the 5.69 d physical edge.
+
 ---
 
 ## Suggested ledger entries
@@ -709,5 +791,6 @@ delete nothing from this file (it is the evidence trail):
 ## Q14 — eb has no in-window coverage filter (transit's ADR-0009 has no eb analogue) · open · label hygiene
 ## Q15 — encoder-capacity arms (z32/whalf) parked at exp04, never re-tested on the frozen recipe · open · needs a GPU wave + an architecture-lock decision
 ## Q16 — can "the latent learns the physics" be saved? evidence assembled both ways; 4 zero-GPU tests · open · framing
-## Q17 — rotation beyond the model's 5.69 d input baseline (limb A, zero-GPU) and below TARS's detection threshold (limb B, needs a protocol) · open · astrophysics question, external origin; decide together with Q13
+## Q17 — rotation beyond the model's 5.69 d input baseline (limb A, zero-GPU) and below TARS's detection threshold (limb B, needs a protocol) · limb A CLOSED 2026-08-27 (T2: readout saturates at the baseline; band signal is real but not SSL-specific), limb B open · astrophysics question, external origin; decide together with Q13
+## Q18 — does the saturation ceiling move with the input baseline? (T2 follow-up; sweep seq_len/window_size and test whether the ~5.6 d ceiling tracks it) · open · needs GPU; would also give T3 a measured basis for the 5.0 vs 5.69 d cap
 ```

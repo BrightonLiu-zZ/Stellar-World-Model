@@ -93,6 +93,12 @@ CELLS = {
     "exp09_clip_hinge_f3p23": ("best_recon_only", "hann"),
     "exp09_clip_hinge_f5p23": ("best_recon_only", "hann"),
     "exp09_clip_hinge_f7p54": ("best_recon_only", "hann"),
+    # wave 6: the plain-hann ladder trains under the HANN taper by construction (that is the whole
+    # contrast), so it is judged under hann; the dyn-off arm keeps its cell's dpss taper because
+    # lambda_dyn changes the dynamics term, not which spectrum the aux term was optimised in.
+    "exp09_hann_w0p025": ("best_recon_only", "hann"),
+    "exp09_hann_w0p10": ("best_recon_only", "hann"),
+    "exp09_dpss_impulse_w0p025_off": ("best_recon_only", "dpss"),
 }
 
 

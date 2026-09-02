@@ -14,6 +14,7 @@ import wandb
 from swm.data.dataset import SeqWindowDataset
 from swm.models import WorldModel
 from swm.train.losses import (
+    decorr_loss,
     dynamics_loss,
     hf_noise_augment,
     hf_noise_min_bin,
@@ -41,13 +42,37 @@ def build_model(cfg: DictConfig, device: str) -> WorldModel:
         gru_hidden=cfg.model.gru_hidden,
         gru_layers=cfg.model.gru_layers,
         dyn_mode=cfg.model.get("dyn_mode", "fwd"), # exp05 fwd/fwd_bwd toggle; .get keeps pre-exp05 configs valid
+        decoder_cond_dim=int(cfg.model.get("decoder_cond_dim", 0)), # exp10 E1; 0 = exp00-09 decoder
     )
     return model.to(device)
 
 
+def features_path(cfg: DictConfig) -> Path | None:
+    """
+    Resolve train.features_path to an absolute path, and fail loud if a consumer needs it and it is unset.
+    exp10's two feature-consuming knobs are independent of each other, so either one silently training
+    against no features (or against zeros) would produce a plausible-looking run of the WRONG cell.
+    """
+    raw = cfg.train.get("features_path", None)
+    needs = int(cfg.model.get("decoder_cond_dim", 0)) > 0 or float(cfg.train.get("decorr_weight", 0.0)) > 0.0
+    if raw is None:
+        assert not needs, "decoder_cond_dim/decorr_weight are set but train.features_path is null"
+        return None
+    path = Path(str(raw))
+    if not path.is_absolute():
+        path = Path(str(cfg.paths.repo_root)) / path
+    assert path.exists(), f"train.features_path {path} does not exist; run experiments/exp10_build_features.py"
+    return path
+
+
 def make_loader(cfg: DictConfig, split: str, randomize: bool, shuffle: bool) -> DataLoader:
     """Build a DataLoader of seq_len-window sequences for one split."""
-    dataset = SeqWindowDataset(cfg.paths.packed_dir, split, cfg.data.seq_len, cfg.data.window, randomize)
+    feats = features_path(cfg)
+    dataset = SeqWindowDataset(cfg.paths.packed_dir, split, cfg.data.seq_len, cfg.data.window, randomize,
+                               features_path=feats)
+    if feats is not None:
+        log.info(f"[{split}] joined {feats.name} to {len(dataset)} segments, "
+                 f"{dataset.n_missing_features} without a feature row")
     return DataLoader(
         dataset,
         batch_size=cfg.data.batch_size,
@@ -146,6 +171,7 @@ def run_epoch(
     aux_weight = float(aux_cfg.weight)
     window = int(cfg.data.window)
     imp_weight = float(cfg.train.get("impulse_penalty_weight", 0.0)) # exp09; 0.0 = inert
+    decorr_weight = float(cfg.train.get("decorr_weight", 0.0)) # exp10 E2; 0.0 = inert
     # exp09 band-limited HF-noise augmentation. TRAIN SPLIT ONLY: noising validation would make
     # val/recon incomparable across cells, and val/recon is both the checkpoint selector and the
     # x-axis of the G9-select gate. Sigma 0.0 (the default) leaves every pre-exp09 run bit-identical.
@@ -156,8 +182,8 @@ def run_epoch(
         if aug_cfg is not None and noise_sigma > 0.0
         else 0
     )
-    sums = {"recon": 0.0, "aux": 0.0, "imp": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0, "mu_var": 0.0,
-            "total": 0.0}
+    sums = {"recon": 0.0, "aux": 0.0, "imp": 0.0, "decorr": 0.0, "kl_total": 0.0, "kl_loss": 0.0, "dyn": 0.0,
+            "mu_var": 0.0, "total": 0.0}
     kl_dim_sum = torch.zeros(cfg.model.z_dim)
     n_batches = 0
 
@@ -165,7 +191,15 @@ def run_epoch(
         optimizer.zero_grad()
     grad_context = torch.enable_grad() if train else torch.no_grad()
     with grad_context:
-        for batch_idx, x in enumerate(tqdm(loader, desc="train" if train else "val", total=len(loader), leave=False)):
+        for batch_idx, batch in enumerate(tqdm(loader, desc="train" if train else "val", total=len(loader),
+                                               leave=False)):
+            # exp10: a features-carrying dataset yields (x, feats); every earlier config yields x alone.
+            feats = None
+            if isinstance(batch, (tuple, list)):
+                x, feats = batch
+                feats = feats.to(device, non_blocking=True) # (B, n_feat) standardized per-star features
+            else:
+                x = batch
             x = x.to(device, non_blocking=True) # (B, S, window, 1)
             if train and noise_sigma > 0.0:
                 x = hf_noise_augment(x, noise_sigma, noise_min_bin) # noise the SAMPLE: input and target together
@@ -174,7 +208,7 @@ def run_epoch(
                 keep = make_keep_mask(x.shape[0] * x.shape[1], window, float(aux_cfg.mask_frac), int(aux_cfg.mask_span), device)
                 x_in = x * keep.view(x.shape[0], x.shape[1], window, 1) # corrupt the input; the target stays clean
             with autocast("cuda", enabled=bool(cfg.train.amp)):
-                out = model(x_in)
+                out = model(x_in, feats)
                 rl = recon_loss(out["recon"], x) # always reconstruct the CLEAN window
                 kl_loss, kl_total, kl_dim = kl_free_bits(out["mu_seq"], out["logvar_seq"], cfg.train.free_bits)
                 if "pred_roll" in out: # multistep mode: the optimized dyn term is the free-running rollout MSE
@@ -193,7 +227,18 @@ def run_epoch(
                     impulse_penalty_loss(out["recon"], x) if imp_weight > 0.0
                     else torch.zeros((), device=out["recon"].device)
                 )
-                loss = rl + aux_weight * al + imp_weight * ip + beta * kl_loss + cfg.train.lambda_dyn * dl
+                # exp10 decorrelation penalty, on its own channel for the same reason as the impulse
+                # penalty above: val/aux must stay comparable across cells and the term needs its own
+                # dose accounting. Computed outside autocast -- a correlation of fp16 standardized
+                # columns is numerically fragile, and the term is cheap (one 128x25 matmul per batch).
+                if decorr_weight > 0.0:
+                    assert feats is not None, "train.decorr_weight > 0 but the batch carried no features"
+                    with autocast("cuda", enabled=False):
+                        dc = decorr_loss(out["mu_seq"], feats)
+                else:
+                    dc = torch.zeros((), device=out["recon"].device)
+                loss = (rl + aux_weight * al + imp_weight * ip + beta * kl_loss
+                        + cfg.train.lambda_dyn * dl + decorr_weight * dc)
             if train:
                 scaler.scale(loss / accum).backward()
                 if (batch_idx + 1) % accum == 0:
@@ -205,6 +250,7 @@ def run_epoch(
             sums["recon"] += float(rl)
             sums["aux"] += float(al)
             sums["imp"] += float(ip)
+            sums["decorr"] += float(dc)
             sums["kl_total"] += float(kl_total)
             sums["kl_loss"] += float(kl_loss)
             sums["dyn"] += float(dl)
@@ -364,8 +410,10 @@ def train(cfg: DictConfig) -> None:
         wandb.log(record, step=epoch)
         log.info(
             f"[{run_name}] ep {epoch} beta {beta} "
-            f"train recon {tr['recon']} aux {tr['aux']} imp {tr['imp']} KL {tr['kl_total']} dyn {tr['dyn']} "
-            f"val recon {va['recon']} aux {va['aux']} imp {va['imp']} KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
+            f"train recon {tr['recon']} aux {tr['aux']} imp {tr['imp']} decorr {tr['decorr']} "
+            f"KL {tr['kl_total']} dyn {tr['dyn']} "
+            f"val recon {va['recon']} aux {va['aux']} imp {va['imp']} decorr {va['decorr']} "
+            f"KL {va['kl_total']} monitor {val_monitor} active {va['n_active_units']}"
         )
 
         # Advance the LR schedule BEFORE checkpointing so the stored scheduler state matches the lr the

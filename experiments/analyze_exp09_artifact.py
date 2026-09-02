@@ -75,6 +75,20 @@ CELLS = {
     "exp09_clip_hinge_f3p23": "best_recon_only",
     "exp09_clip_hinge_f5p23": "best_recon_only",
     "exp09_clip_hinge_f7p54": "best_recon_only",
+    # wave 6: the two plain-hann cells are weight-matched one-factor contrasts against the
+    # dpss+kurtosis twins above (w0p025 1.553, w0p10 2.203), so they must be read at the SAME
+    # checkpoint rule as those twins or the contrast compares two different selection criteria.
+    "exp09_hann_w0p025": "best_recon_only",
+    "exp09_hann_w0p10": "best_recon_only",
+    # wave 6: the dyn-off counterpart of the switch candidate. Scored here only so the arm contrast
+    # the paper needs has a severity number of its own; it is not an input to the switch rule.
+    "exp09_dpss_impulse_w0p025_off": "best_recon_only",
+    # wave 7: the free_bits 2x2. Severity is a SECONDARY here (the target is collapse), but these must
+    # still read best_recon_only or they would be compared against the weight ladder at a checkpoint
+    # chosen by a different rule -- decision A3, the same trap wave 3 recorded.
+    "exp09_dpss_impulse_w0p03": "best_recon_only",
+    "exp09_dpss_impulse_w0p03_fb0p01": "best_recon_only",
+    "exp09_dpss_impulse_w0p025_fb0p01": "best_recon_only",
     "exp07_hann0p3_fbwd": "best_recon_aux",   # protocol gate: must reproduce centre ~13.5, edge ~1.15
     "exp07_comb0p3_fbwd": "best_recon_aux",   # rectangular contrast: impulse at the EDGE (~31x)
 }
@@ -172,6 +186,11 @@ def main() -> int:
         centre_ratio=("centre_ratio", "mean"), edge_ratio=("edge_ratio", "mean"),
         max_pos_min=("max_pos", "min"), max_pos_max=("max_pos", "max"), n=("seed", "size"))
     summary["G9_artifact_pass"] = summary["max_ratio"] <= 1.5
+    # G17-artifact (declared 2026-08-25, BEFORE any wave-6 run) is a SEPARATE forward-only gate that
+    # governs the ENCODER CHOICE only. It is emitted BESIDE G9, never in place of it: every exp09
+    # verdict above stays scored at the threshold it was pre-registered against, and every wave-6
+    # table names both. See the gates block of experiments/configs/exp09_loss_exploit_ladder.yaml.
+    summary["G17_artifact_pass"] = summary["max_ratio"] <= 2.0
     summary.to_csv(f"{args.out_prefix}_summary.csv")
 
     print("\n=== PROTOCOL GATE: recomputed exp07 reference vs published")
@@ -184,7 +203,8 @@ def main() -> int:
         print(f"  {cell}: centre {got['centre_ratio']:.2f} vs published {pub['centre']} -> {'OK' if ok_c else 'DRIFT'}"
               f" | edge {got['edge_ratio']:.2f} vs {pub['edge']} -> {'OK' if ok_e else 'DRIFT'}")
 
-    print("\n=== G9-artifact: max-over-position impulse ratio (gate <= 1.5x, 6 seeds)")
+    print("\n=== impulse ratio, max over position | G9-artifact <= 1.5x (mechanism, pre-registered)"
+          "\n                                     | G17-artifact <= 2.0x (encoder choice, forward-only)")
     print(summary.round(3).to_string())
     print("\nNOTE: the number is necessary, NOT sufficient. G9-artifact also requires visual sign-off on a"
           "\nfresh random sample of reconstructions (src/notebooks/exp09_diagnostics.ipynb).")

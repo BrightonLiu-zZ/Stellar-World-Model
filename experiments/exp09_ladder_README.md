@@ -1,6 +1,8 @@
 # exp09 — loss-exploit ladder: does closing the channel close the model-selection void?
 
-**Status:** complete through wave 5, 2026-08-22. 84 runs over 14 cells on THREE axes (mechanism, amount, level). `aug_hfnoise` is the one designed cell never run.
+**Status:** complete through **wave 7, 2026-08-28**. 138 runs over 20 cells on FOUR axes (mechanism, amount, level, KL floor) plus a 12-seed encoder-decision wave. `aug_hfnoise` is the one designed cell never run.
+**Encoder decision (roadmap D17): `hann0p3` SHIPS** — the switch rule did not fire, branch **P11-C**. See the wave-6 section. Wave 7 does not reopen it.
+**Headline, unchanged and now broader: no cell passes both `G9-artifact` and `G9-noregress` across ELEVEN interventions on four axes.** Wave 7 did fix the posterior collapse (`free_bits = 0.01`, 12/12 clean) — the cell still fails both gates, in the way P12-D pre-registered.
 **Manifest (single source of truth):** `experiments/configs/exp09_loss_exploit_ladder.yaml`
 **Roadmap:** `docs/roadmap/2026-08-15-post-yue-ma-roadmap.md` (lane M) ·
 **Provenance:** `docs/roadmap/2026-08-15-yue-ma-suggestions-analysis.md` ·
@@ -457,3 +459,395 @@ wave-2 addendum, never folded into the pre-registered ladder.** Two results wort
 anyway: the purchase measure *did* compose (1.94× at budget 2, against ~1.6× for independence), and the
 residual kurtosis reached the no-pressure floor while severity stayed at 2.91× — which is what
 established that **G9-artifact and peakiness are different quantities**.
+
+---
+
+## Wave 6 — the encoder decision (2026-08-26, post-hoc, 30 runs, ~13 h, 0 runner failures)
+
+**Verdict: P11-C on the encoder question and P11-F on the mechanism multiplier. `hann0p3` ships.**
+
+Wave 6 does not ask exp09's question — that one is answered and stays answered. It asks the downstream
+question roadmap D17 needed settled: which encoder does the ML4PS paper ship? The switch candidate was
+`exp09_dpss_impulse_w0p025`, the one cell that had reached the encoder-selection gate with a valid dose.
+
+**Two gates, both named, neither substituted for the other.** `G9-artifact <= 1.5` is pre-registered
+(2026-08-15) and governs exp09's *mechanism* verdicts; it is untouched and nothing above is rescored.
+`G17-artifact <= 2.0` was declared 2026-08-25 **before any wave-6 run** and governs the *encoder choice*
+only. The published claim — no cell passes both gates across ten interventions on three axes — stands
+exactly as written.
+
+### What ran
+
+| cell | seeds | why |
+|---|---|---|
+| `exp09_dpss_impulse_w0p025` | **6-11** (to 12) | the switch candidate, extended to the pre-registered final n |
+| `exp07_hann0p3_fbwd` | **6-11** (to 12) | reference extension: every exp09 delta is paired by seed, so the reference needed 12 too |
+| `exp09_hann_w0p025` | 0-5 | plain-Hann twin of `w0p025` — one-factor mechanism contrast at constant pressure |
+| `exp09_hann_w0p10` | 0-5 | plain-Hann twin of `w0p10` — the second point that measures how the multiplier moves |
+| `exp09_dpss_impulse_w0p025_off` | 0-5 | dyn-off insurance for the paper's arm contrast; never an input to the switch rule |
+
+### Footing — both reproductions exact before anything new was read
+
+```
+severity, w0p025 seeds 0-5 re-run vs published          : max abs diff 0.0
+probe,    hann0p3_fbwd seeds 0-5 vs exp07_aux_gap_6seed : 72 rows, max abs diff 0.0
+6-seed switch ratios reproduce the manifest's pre-registered values exactly:
+  eb 0.93 . pulsating 0.07 . rotation 1.52 . transit 0.39
+```
+
+### Severity — G9 1.5 (mechanism) and G17 2.0 (encoder), side by side
+
+| cell | n | severity | sd | `max_pos` span | G9 (1.5) | G17 (2.0) |
+|---|---|---|---|---|---|---|
+| `dpss_impulse_w0p025` | 12 | **1.525** | 0.115 | 19-234 | fail | **PASS** |
+| `dpss_impulse_w0p025_off` | 6 | 1.596 | 0.075 | 93-233 | fail | **PASS** |
+| `hann_w0p025` | 6 | 7.487 | 3.115 | 119-130 | fail | fail |
+| `hann_w0p10` | 6 | 10.853 | 1.988 | 113-131 | fail | fail |
+| `exp07_hann0p3_fbwd` | 12 | 11.998 | 4.070 | 122-150 | fail | fail |
+
+**`max_pos` span is a second, independent read on the same question, and it is free.** A planted impulse
+sits at one address every seed; noise wanders. The candidate's maximum lands anywhere in 19-234 across
+its twelve seeds, while every plain-Hann cell locks into 113-131. The ratio and the address agree.
+
+### The result nobody predicted: the candidate is VOID at 12 seeds
+
+Seed 6 finished at **0 active units, KL 0.000, dose 0.000, `val/recon` 1.201** against ~0.816 for every
+healthy seed — a total posterior collapse. G9-dose is applied **before** the probe is read, so the row
+is void and its probe verdict is not evidence in either direction.
+
+This is the wave-5 P9 finding arriving at the one cell that had escaped it. Wave 5 established that
+every weight strictly between `aux_none` and `w0p025` which reaches the artifact gate does so only by
+killing a seed. `w0p025` was the exception — clean, useful, valid at 6 seeds. **At 12 seeds it is not an
+exception; 6 seeds was simply too few to see a 1-in-12 collapse mode.** The honest generalisation is now
+stronger and simpler than the one wave 5 could support: *there is no weight of this objective that is
+simultaneously clean, useful and reliably valid* — the qualifier that moved is "reliably".
+
+Note which direction the collapse pushes the gate: a collapsed decoder reconstructs a constant, so its
+error profile is flat and its severity (1.200) sits near the no-pressure floor. It drags the 12-seed
+mean **down**, from 1.555 to 1.525. The void seed *flatters* G17; it does not threaten it.
+
+### The verdict does not turn on the void call
+
+Dropping a seed selected post-hoc on a probe-correlated outcome is precisely the estimator swap the
+VOID rule exists to forbid, so it is not done. It was nonetheless computed, for one reason: to find out
+whether a reader has to adjudicate the void question at all. They do not.
+
+| clause | as written (12 seeds, VOID) | seed 6 dropped (11 seeds, **not a decision input**) |
+|---|---|---|
+| (1) G17-artifact <= 2.0 | 1.525 **PASS** | 1.555 **PASS** |
+| (2) visual sign-off | **clean** (see below) | clean |
+| (3) G9-noregress `mean` | PASS | PASS |
+| (3) G9-noregress `mean_std` | **FAIL: pulsating** (-1.40) | **FAIL: pulsating** (-1.24) |
+| (4) >=2 of 4 v1 above 2*SE at `mean` | 0/4 | 2/4 (eb 1.01, rotation 1.13) |
+
+**`G9-noregress` fails on `pulsating` at `mean_std` under both estimators**, and clause (3) requires
+both readouts. The switch cannot fire either way. The six new seeds moved `pulsating` against the
+candidate (`mean_std` ratio -0.62 at 6 seeds -> -1.24 at 11 -> -1.40 at 12); the 6-seed footing that made
+this wave look decisive was the optimistic tail of a noisier distribution than it appeared to be.
+
+**12 was the pre-registered final n. There is no further extension** — that would be optional stopping,
+and the whole point of writing the number down in advance was to make this moment non-negotiable.
+
+### The visual clause reads the other way, and that is worth saying out loud
+
+`experiments/exp09_wave6_signoff.png` (fresh unseeded sample, re-drawn every run). The incumbent plants
+a violent spike at position ~125-145 in **every sampled window**, independent of what the flux does
+there; the candidate has none, and tracks high-frequency structure the incumbent smooths away. On the
+6-seed mean position profile the incumbent peaks at **5.31x** the interior median at position 125, the
+candidate at **1.19x** at position 30.
+
+So the picture prefers the candidate and the probe does not. That disagreement is the honest result and
+it is *why* the rule was pre-registered with four conjunctive clauses rather than one: a clean picture
+was never sufficient, in either direction. It also re-states the project's oldest finding in a new
+place — **the artifact is real, visible, reproducible, and probe-harmless** — which is exactly what
+exp07 measured (`numax_hon` +0.0001 +/- 0.0037) and what this wave now confirms at 12 seeds on four v1
+tasks.
+
+### P11-F: the mechanism multiplier does not decay — it *grows* as pressure falls
+
+Pre-registered branches: **P11-D** (multiplier ~ weight-independent -> hann ~ 3.5 / 7.5) or **P11-E**
+(multiplier decays toward 1 -> hann_w0p025 ~ 1.7-2.0 and becomes a live, simpler candidate). Measured,
+against the weight-matched dpss+kurtosis twins, on both the raw ratio and the floor-subtracted excess
+(the metric's null is `aux_none` 1.172, not 1.0, so a raw ratio silently credits the mechanism with a
+floor both cells share):
+
+| weight | hann only | dpss+kurtosis | mult (raw) | mult (excess over floor) |
+|---|---|---|---|---|
+| 0.025 | 7.487 | 1.525 | 4.91 | **17.88** |
+| 0.10 | 10.853 | 2.203 | 4.93 | **9.40** |
+| 0.30 | 11.998 | 2.913 | 4.12 | **6.22** |
+
+Neither branch. **P11-F**, recorded as a mismatch and not snapped to the nearest branch (the P8
+precedent). The excess multiplier nearly triples as pressure drops 12x, and `hann_w0p10` at 10.85 is the
+literal example P11-F names ("far above 7.5").
+
+The mechanism is not a fixed discount on the artifact — **it is the only thing that makes the weight
+knob work at all.** With the machinery, severity falls 2.913 -> 2.203 -> 1.525 as weight falls 0.30 ->
+0.10 -> 0.025. Without it, plain Hann barely moves: 11.998 -> 10.853 -> 7.487 over the same 12x range,
+still at the incumbent's level. This retires the strong form of F12 from the other side: F12 said the
+gate measures pressure rather than mechanism, and the honest statement is now that **pressure is a lever
+only in the presence of the mechanism**.
+
+**Independently corroborated by the bump ablation** (`exp09_bump_ablation_w6.csv`, budget 2, purchase
+asymmetry = bump% / rand%), which is a different instrument on the same claim:
+
+| cell | weight | spectral | asymmetry |
+|---|---|---|---|
+| `aux_none` (aux term off) | 0 | 63.97 | **0.01** — the honest-residual floor |
+| `dpss_impulse_w0p025` | 0.025 | 5.33 | 2.17 |
+| `dpss_impulse_w0p025_off` | 0.025 | 5.02 | 2.29 |
+| `dpss_impulse_w0p10` | 0.10 | 2.97 | 2.28 |
+| `hann_w0p025` | 0.025 | 3.68 | **17.33** |
+| `hann_w0p10` | 0.10 | 2.20 | 15.43 |
+| `exp07_hann0p3_fbwd` | 0.30 | 1.98 | 12.31 |
+
+Plain Hann's purchase **rises** as pressure falls (12.3 -> 15.4 -> 17.3); the machinery arm sits flat at
+~2.2 at every weight. Note also that `hann_w0p025` reaches a *better* aux loss (3.68) than its twin
+(5.33) — at one twelfth of `hann0p3`'s weight it is still buying the term with an impulse rather than
+earning it.
+
+### The off arm — insurance that was not needed, and one number worth keeping
+
+`exp09_dpss_impulse_w0p025_off` was added in case the switch fired and stranded R1's dynamics-
+specificity contrast on a retired encoder. The switch did not fire, so the insurance goes unused. Its
+one carry-forward: severity 1.596 (dyn-off) against 1.525 (dyn-on) — **artifact suppression at this
+recipe is not dynamics-dependent**, which is a small but free control on the wave-3/4 weight story.
+G9-dose is inapplicable to it by construction (lambda = 0, so dose is identically 0) and the VOID rule
+does not apply, as was already the case for exp07's off arms.
+
+### Reproduce
+
+```bash
+# training (USER TERMINAL ONLY -- GPU + W&B online); resumable, DONE-marker skipping
+.\experiments\run_exp09_loss_exploit_ladder.ps1 -MaxHours 13.0
+
+# eval fan (CC-runnable). THREE invocations: the checkpoint arm differs, and the mu cache is keyed
+# {cell}_seed{seed}.npz with NO checkpoint in the key, so a shared cache dir silently reuses the
+# wrong arm. exp07_hann0p3_fbwd seeds 0-5 predate best_recon_only.pt and must be read at
+# best_recon_aux; all 12 are therefore scored there.
+python -m swm.eval.dump_wandb_history --groups exp09 exp07_hann0p3_fbwd \
+    --out experiments/exp09_forensics/curves_exp09
+python experiments/analyze_exp09_artifact.py --cells exp09_dpss_impulse_w0p025 \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --out-prefix experiments/exp09_impulse_w6_cand
+python experiments/analyze_exp09_artifact.py --cells exp07_hann0p3_fbwd \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --out-prefix experiments/exp09_impulse_w6_ref
+python experiments/analyze_exp09_artifact.py --cells exp09_hann_w0p025 exp09_hann_w0p10 \
+    exp09_dpss_impulse_w0p025_off --seeds 0 1 2 3 4 5 --out-prefix experiments/exp09_impulse_w6_new
+python experiments/analyze_exp07_diagnostics.py --stages mu stars --cells exp09_dpss_impulse_w0p025 \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --ckpt best_recon_only \
+    --cache-dir experiments/exp09_forensics/mu_cache_w6_ro --out-prefix experiments/exp09_diag_w6_ro
+python experiments/analyze_exp07_diagnostics.py --stages mu stars --cells exp07_hann0p3_fbwd \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --ckpt best_recon_aux \
+    --cache-dir experiments/exp09_forensics/mu_cache_w6_ref --out-prefix experiments/exp09_diag_w6_ref
+python experiments/analyze_exp07_diagnostics.py --stages mu stars \
+    --cells exp09_dpss_impulse_w0p025_off exp09_hann_w0p025 exp09_hann_w0p10 --seeds 0 1 2 3 4 5 \
+    --ckpt best_recon_only --cache-dir experiments/exp09_forensics/mu_cache_w6_new \
+    --out-prefix experiments/exp09_diag_w6_new
+# the bump ablation writes to its OWN wave-6 file. Do NOT point a --cells-scoped run at the default
+# --out: that overwrites the 14-cell table and silently breaks notebook section D11 (happened
+# 2026-08-17, repaired 2026-08-18).
+python experiments/analyze_exp09_bump_ablation.py --cells exp09_hann_w0p025 exp09_hann_w0p10 \
+    exp09_dpss_impulse_w0p025_off --seeds 0 1 2 3 4 5 --out experiments/exp09_bump_ablation_w6.csv
+python experiments/analyze_exp09_wave6_gates.py     # both gates, VOID before probe, P11 branches
+python experiments/plot_wave6_signoff.py            # the visual clause, fresh unseeded sample
+```
+
+### Wave-6 outputs
+
+`exp09_impulse_w6_{cand,ref,new}_{runs,summary}.csv` · `exp09_impulse_w6_*_profile.parquet` ·
+`exp09_diag_w6_{ro,ref,new}_{probe_summary.csv,star_scores.parquet}` · `exp09_bump_ablation_w6.csv` ·
+`exp09_wave6_signoff.png` · `exp09_forensics/mu_cache_w6_{ro,ref,new}/` ·
+`exp09_forensics/curves_exp09/` (now 120 runs)
+
+### What wave 6 changes downstream
+
+- **Encoder is settled: `hann0p3`.** D17 closes ahead of its Sept 1 deadline. F1/C3/C3b need no re-run —
+  they were already computed on `hann0p3` mu, and the "encoder-agnostic code" hedge goes unused.
+- **No further encoder tuning**, per D17 as written ("if nothing passes both gates -> `hann0p3` ships").
+- The 12-seed reference (`exp07_hann0p3_fbwd` seeds 0-11) is now available for any later paired test
+  that wants more than 6 seeds on the shipping encoder.
+
+---
+
+## Wave 7 — the collapse wave: is the posterior collapse fixable? (2026-08-28, 24 runs, ~10 h)
+
+**Verdict: the collapse IS fixed, and the cell still fails both gates. P12-D fired as pre-registered.**
+Eleven interventions on FOUR axes now — mechanism, amount, level, and the KL floor — and no cell passes
+`G9-artifact` and `G9-noregress` together.
+
+Wave 6 lost a seed of `w0p025` to total posterior collapse (KL 0.000, 0 active units) and voided the
+project's best-probing cell. Wave 7 asks the narrow follow-up: is that a fixable stability bug, and does
+the cell survive 12 seeds once it is fixed? **Scope: this does NOT reopen D17** — `hann0p3` still ships,
+and this is a Lane-M / journal cell (rule 6 bars new mechanism experiments pre-submission).
+
+### The design: a 2x2 whose fourth corner was already paid for
+
+```
+                free_bits 0.00                     free_bits 0.01
+  w = 0.025     wave 6: 12 seeds, 1 collapse       NEW: 6 -> 12 seeds (stage 2)
+  w = 0.030     NEW: 6 seeds                       NEW: 6 seeds
+```
+
+`free_bits = 0.01` was **derived, not copied**. exp03's winning floor worked because it sat *below*
+true KL — "with the floor below true KL, beta finally exerts live gradient" (`exp03_sweep_README.md`),
+geometry 2.56 nats against KL ~3.0, ratio 0.853. exp09's measured KL is 1.588 at w=0.025 and 1.638 at
+w=0.03, so the same ratio gives fb 0.0106 and 0.0109 -- both round to 0.01, which is what makes this a
+clean factorial. Copying exp03's literal 0.02 would have put the floor at **1.56x above** KL, binding on
+every seed and destroying the property that made it win.
+
+### Stage 1 (18 runs, 6 seeds each): every arm clean, and the levers separate on the probe
+
+| cell | collapses | dose (min) | KL | `n_active` (min) | severity | probe at `mean` |
+|---|---|---|---|---|---|---|
+| `w0p025` fb=0.00 (wave 6) | **1 / 12** | 0.676 (0.000) | 1.456 | 6.2 (0.0) | 1.525 | VOID |
+| `w0p025` fb=0.01 | 0 / 6 | 1.097 (0.984) | 1.918 | 94.5 (63.4) | 1.471 | 2/4 past 2*SE |
+| `w0p03` fb=0.00 | 0 / 6 | 0.708 (0.680) | 1.671 | 6.2 (5.0) | 1.606 | **0/4** |
+| `w0p03` fb=0.01 | 0 / 6 | 1.112 (1.090) | 2.079 | 78.2 (65.7) | 1.674 | 1/4 |
+
+**Raising the weight fixes the collapse and costs the probe.** `w0p03` fb=0.00 is the one arm where the
+collapse metric is still honestly measured (unfloored, `n_active` 5-8), and it is clean at 6 seeds -- but
+rotation falls 0.5821 -> 0.5587 and `mean4` to 0.5679, *below the incumbent's* 0.5699. Pressure buys
+stability by degrading the representation. Only the floor at the LOW weight bought stability without
+that cost.
+
+### `n_active` is NOT diagnostic under a floor -- and per-dim KL says the floor CONCENTRATED the latent
+
+`active_unit_kl_threshold` is 0.01 and `free_bits` is 0.01: **the floor sits exactly at the counting
+threshold**, so the 6 -> 94 jump in "active units" is largely mechanical. `swm.eval.kl_dim_report` on
+`best_recon_only` settles what is really there:
+
+| cell | KL_total | dims >0.01 | dims >0.02 | dims >0.05 | frac KL in top-6 dims |
+|---|---|---|---|---|---|
+| `w0p025` fb=0.00 | 1.491 | 7.3 | 4.6 | **3.4** | **79%** |
+| `w0p025` fb=0.01 | 1.951 | **109.2** | 2.8 | 1.7 | 34% |
+| `w0p03` fb=0.00 | 1.721 | 6.0 | 5.3 | **4.0** | **85%** |
+| `w0p03` fb=0.01 | 2.099 | **95.0** | 1.3 | 1.2 | 40% |
+
+The ~100 extra "active" dims sit pinned in the band [0.01, 0.02]. The floor did not add capacity -- the
+floored cells carry **fewer** strongly-informative dims (1.7 vs 3.4 above 0.05). This is wave 5's
+dilution finding reproduced through a different knob, and it retires `n_active` as a collapse indicator
+for any floored cell, exactly as wave 5 retired the ablation `asymmetry` ratio for them.
+
+**A consequence for the VOID rule itself, recorded here rather than assumed away.** `free_bits` removes
+the gradient below the floor, so `KL_total` can never reach 0 and a floored cell **cannot register a
+collapse in the terms G9-dose names**. "12/12 clean" is therefore evidenced by `val_recon` (0.810-0.865,
+against the collapsed seed's 1.201) and by the probe, NOT by the metric the rule is written on. Any
+future floored cell must be judged the same way.
+
+### Stage 2 (6 runs): the 6-seed pass did not replicate -- for the third time
+
+Pre-registered before stage 1: any arm clean at 6 seeds gets seeds 6-11 before any claim. All three
+qualified; the user narrowed the extension to `w0p025_fb0p01` alone. **Recorded as a deviation** -- see
+the manifest -- because extending only the best-looking arm is selection on the outcome. What it costs
+is the cross-weight attribution: both `w0p03` arms stay at 6 seeds, so "the floor works, the weight does
+not" remains a 6-seed statement. What it buys is the most informative 6 runs available: a matched-n
+12v12 one-factor test on the `free_bits` axis, against a 12-seed reference.
+
+| | 6 seeds (stage 1) | **12 seeds (final)** |
+|---|---|---|
+| collapses | 0/6 | **0/12** (dose 0.958-1.177, `val_recon` 0.810-0.865) |
+| **G9-artifact <= 1.5** | **1.471 PASS** | **1.546 FAIL** (seeds <=1.5: 5/12) |
+| G17-artifact <= 2.0 | PASS | PASS |
+| G9-noregress `mean` | PASS | **FAIL: pulsating** (-0.0163, -1.09) |
+| G9-noregress `mean_std` | PASS | **FAIL: pulsating** (-0.0180, -1.03) |
+| >=2 of 4 past 2*SE at `mean` | 2/4 | **2/4** (eb +0.0151 = 1.83, rotation +0.0206 = 2.06) |
+
+```
+severity, seeds 0-5 : 1.399 1.493 1.424 1.549 1.578 1.384   mean 1.471   PASS
+severity, seeds 6-11: 1.529 1.456 1.714 1.778 1.646 1.601   mean 1.621
+all 12                                                       1.546   FAIL
+```
+
+The four highest severities in the whole set are stage-2 seeds. **A 6-seed gate pass in this project has
+now failed to replicate three times** (wave 6's dose, wave 6's probe, wave 7's artifact); treat any
+6-seed pass as provisional by default.
+
+What DID hold: eb and rotation barely moved (1.91 -> 1.83, 2.29 -> 2.06). The gains are real; they are
+simply not enough, because the gate is a conjunction.
+
+### P12-D, pre-registered 2026-08-26, FIRED -- with its predicted mechanism
+
+> "P12-D (free_bits COSTS the probe): fixes the collapse but regresses on G9-noregress where its
+> unfloored twin does not -> the floor bought stability with representation quality. Watch this:
+> floor/KL is 0.81 at w=0.025 and 0.78 at w=0.03, close enough to bind on the weakest seeds."
+
+At 12 seeds the unfloored twin regresses on pulsating at ONE readout; the floored cell regresses at
+**both**. The floor bound, and it bound on pulsating -- the spectral task, which is what a latent
+diluted across ~109 floor-pinned dimensions should be expected to lose.
+
+**The bistability gives that mechanism a face.** The 12 seeds split 6/6 into two basins, and the
+pulsating cost lives almost entirely in one of them:
+
+| cluster | seeds | KL | units | pulsating | eb | rotation | `mean4` |
+|---|---|---|---|---|---|---|---|
+| A | 0,2,3,8,9,11 | ~2.05 | 60-78 | **-0.0041** | +0.0152 | +0.0288 | 0.5797 |
+| B | 1,4,5,6,7,10 | ~1.70 | 111-124 | **-0.0285** | +0.0149 | +0.0124 | 0.5696 |
+
+More dims pinned at the floor -> worse pulsating; `eb` is identical across basins (+0.0152 / +0.0149).
+**This does NOT rescue the cell.** Splitting on a training quantity after seeing the result is still
+post-hoc, and cluster A is 6 seeds -- the exact n that has now misled this project three times. It is
+recorded as hypothesis-generating: if a floor can be made to land in basin A reliably (a lower fb, or a
+floor with a cap on pinned units), the trade P12-D describes might be avoidable. That is a new
+experiment under a new pre-registration, not a reading of this one.
+
+### Absolute PR-AUC at `mean`, each cell at its own final n
+
+| cell | pulsating | eb | rotation | transit | `mean4` |
+|---|---|---|---|---|---|
+| `hann0p3_fbwd` (ref, 12) | **0.8078** | 0.7741 | 0.5569 | 0.1458 | 0.5712 |
+| `w0p025` fb=0.00 (12, VOID) | 0.7971 | 0.7503 | 0.5596 | 0.1413 | 0.5621 |
+| `w0p025` fb=0.01 (12) | 0.7915 | **0.7892** | **0.5775** | 0.1404 | 0.5746 |
+| `w0p03` fb=0.00 (6) | 0.7908 | 0.7775 | 0.5587 | 0.1445 | 0.5679 |
+| `w0p03` fb=0.01 (6) | 0.8015 | 0.7873 | 0.5730 | **0.1517** | **0.5783** |
+| untrained | 0.7683 | 0.7124 | 0.5315 | 0.0805 | 0.5232 |
+
+`mean4` is a REPORTED SECONDARY, never a gate (decision 2026-08-26): PR-AUC is prevalence-scaled, so an
+unweighted mean is dominated by the high-prevalence tasks. Note it disagrees with the gates -- the best
+`mean4` belongs to a 6-seed cell that clears only 1 of 4 tasks -- which is precisely why it is not one.
+
+### What wave 7 changes
+
+- **The collapse has a known fix.** `free_bits = 0.01` at w=0.025 gives 12/12 healthy seeds. Anyone
+  re-running the low-weight recipe should carry it.
+- **`n_active` is retired for floored cells**, and the VOID rule's metric is undefined for them --
+  judge on `val_recon` and the probe instead.
+- **The exp09 headline is unchanged and now broader:** eleven interventions, four axes, still no cell
+  passes both gates. The floor was the most promising untried lever and it failed in a *pre-registered*
+  way, which is a stronger result than an unexplained failure.
+- **`hann0p3` still ships.** D17 stays closed; nothing here reopens it.
+
+### Reproduce
+
+```bash
+# training (USER TERMINAL ONLY -- GPU + W&B online); resumable, DONE-marker skipping
+.\experiments\run_exp09_loss_exploit_ladder.ps1 -MaxHours 8.0    # stage 1, 18 runs
+.\experiments\run_exp09_loss_exploit_ladder.ps1 -MaxHours 3.0    # stage 2, 6 runs
+
+# eval fan (CC-runnable). All wave-7 cells read best_recon_only -- decision A3.
+python -m swm.eval.dump_wandb_history --groups exp09 exp07_hann0p3_fbwd \
+    --out experiments/exp09_forensics/curves_exp09
+python experiments/analyze_exp09_artifact.py --cells exp09_dpss_impulse_w0p03 \
+    exp09_dpss_impulse_w0p03_fb0p01 exp09_dpss_impulse_w0p025_fb0p01 --seeds 0 1 2 3 4 5 \
+    --out-prefix experiments/exp09_impulse_w7
+python experiments/analyze_exp09_artifact.py --cells exp09_dpss_impulse_w0p025_fb0p01 \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --out-prefix experiments/exp09_impulse_w7s2
+python experiments/analyze_exp07_diagnostics.py --stages mu stars --cells exp09_dpss_impulse_w0p03 \
+    exp09_dpss_impulse_w0p03_fb0p01 exp09_dpss_impulse_w0p025_fb0p01 --seeds 0 1 2 3 4 5 \
+    --ckpt best_recon_only --cache-dir experiments/exp09_forensics/mu_cache_w7_ro \
+    --out-prefix experiments/exp09_diag_w7_ro
+python experiments/analyze_exp07_diagnostics.py --stages mu stars \
+    --cells exp09_dpss_impulse_w0p025_fb0p01 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 \
+    --ckpt best_recon_only --cache-dir experiments/exp09_forensics/mu_cache_w7s2_ro \
+    --out-prefix experiments/exp09_diag_w7s2_ro
+# the per-dim KL evidence for the dilution finding (n_active is NOT diagnostic under a floor)
+python -m swm.eval.kl_dim_report --ckpt-glob \
+    "experiments/exp09_dpss_impulse_w0p0*/models/B_seed*/best_recon_only.pt" \
+    --out experiments/exp09_forensics/kl_dim_w7
+```
+
+### Wave-7 outputs
+
+`exp09_impulse_w7{,s2}_{runs,summary}.csv` · `exp09_impulse_w7*_profile.parquet` ·
+`exp09_diag_w7{,s2}_ro_{probe_summary.csv,star_scores.parquet}` ·
+`exp09_forensics/kl_dim_w7/{kl_dim_long,ckpt_summary}.csv` ·
+`exp09_forensics/mu_cache_w7{,s2}_ro/` · `exp09_forensics/curves_exp09/` (now 144 runs)

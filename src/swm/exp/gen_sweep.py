@@ -104,9 +104,48 @@ def render_cell_yaml(cell: dict, manifest: dict, manifest_path: Path) -> str:
     return "\n".join(header) + "\n\n" + yaml.safe_dump(body, sort_keys=False, default_flow_style=False, width=110)
 
 
+ORDERS = ("seed-major", "cell-major")
+
+
+def render_expansion(order: str, seed_universe: list[int]) -> tuple[str, str]:
+    """The runner's run-ordering block, plus the one-line rationale printed in its header.
+
+    seed-major walks seeds outermost, so a -MaxHours cutoff leaves EVERY cell with even seed coverage --
+    right when the cells are peers and a partial sweep should stay balanced (waves 1-5).
+    cell-major walks cells outermost, finishing each cell's whole seed list before starting the next --
+    right when the cells are NOT peers and one of them carries a decision, because a cutoff then leaves
+    the leading cells COMPLETE instead of leaving all of them partial (wave 6: the 12-seed confirm and
+    its paired reference must both finish, or the encoder decision cannot be scored at all).
+    """
+    if order == "cell-major":
+        body = "\n".join([
+            "# cell-major expansion: each cell's full seed list before the next cell starts",
+            "$runs = @()",
+            "foreach ($c in $cells) {",
+            "  foreach ($seed in $c[2]) { $runs += , @($c[0], $c[1], $seed) }",
+            "}",
+        ])
+        return body, ("cell-major order so a -MaxHours cutoff leaves the LEADING cells complete "
+                      "(manifest cell order is the priority order)")
+    body = "\n".join([
+        "# seed-major expansion",
+        "$runs = @()",
+        f"foreach ($seed in @({', '.join(str(s) for s in seed_universe)})) {{",
+        "  foreach ($c in $cells) {",
+        "    if ($c[2] -contains $seed) { $runs += , @($c[0], $c[1], $seed) }",
+        "  }",
+        "}",
+    ])
+    return body, "seed-major order so a -MaxHours cutoff leaves every cell with even seed coverage"
+
+
 def render_runner(manifest: dict, cells: list[dict], manifest_path: Path) -> str:
-    """Seed-major resumable PS 5.1 queue, mirroring run_exp05_train_sweep.ps1 (DONE markers, retry,
-    -DryRun, -MaxHours) - but with zero config content: each run is just +experiment=<expNN>/<cell>."""
+    """Resumable PS 5.1 queue, mirroring run_exp05_train_sweep.ps1 (DONE markers, retry, -DryRun,
+    -MaxHours) - but with zero config content: each run is just +experiment=<expNN>/<cell>.
+
+    Run order comes from the manifest's `sweep.order` (default seed-major, which is what every
+    exp06-exp08 manifest gets whether or not it declares the key).
+    """
     name = manifest["name"]
     sweep = manifest["sweep"]
     exp_group = name.split("_")[0] # exp06
@@ -119,9 +158,12 @@ def render_runner(manifest: dict, cells: list[dict], manifest_path: Path) -> str
         f"  @('{c['exp_name']}', '{c['geometry']}', @({', '.join(str(s) for s in c['seeds'])}))" for c in cells
     ]
     per_run = sweep.get("per_run_minutes", {})
+    order = sweep.get("order", "seed-major")
+    assert order in ORDERS, f"sweep.order must be one of {ORDERS}, got {order!r}"
+    expansion, order_note = render_expansion(order, seed_universe)
     lines = f"""{BANNER.format(manifest=manifest_path.as_posix())}
 # {name} - TRAINING ONLY, run in your own terminal (GPU + W&B online). Plan: {manifest['plan']}
-# {len(cells)} cells, seed-major order so a -MaxHours cutoff leaves every cell with even seed coverage.
+# {len(cells)} cells, {order_note}.
 # Estimated per-run minutes: {per_run} (VERIFY against the first runs; exp05-derived).
 # INTERRUPT/RESUME: Ctrl-C anytime; train.resume=true + last.pt resume mid-run; DONE.txt skips finished runs.
 # Usage:  cd C:\\git_repo\\Stellar-World-Model ; .\\experiments\\run_{name}.ps1
@@ -154,13 +196,7 @@ $cells = @(
 {(',' + chr(10)).join(cell_lines)}
 )
 
-# seed-major expansion
-$runs = @()
-foreach ($seed in @({', '.join(str(s) for s in seed_universe)})) {{
-  foreach ($c in $cells) {{
-    if ($c[2] -contains $seed) {{ $runs += , @($c[0], $c[1], $seed) }}
-  }}
-}}
+{expansion}
 
 $sweepStart = Get-Date
 $failed = @()

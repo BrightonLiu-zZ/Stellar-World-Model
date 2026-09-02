@@ -130,6 +130,12 @@ def main() -> int:
                     help="Arm names to extract: `untrained`, or any name ending seed<N> / _s<N>.")
     ap.add_argument("--ckpt-dir", default=None,
                     help="models/ dir holding B_seed<N>/best_recon_aux.pt. Default: the exp03 leader.")
+    ap.add_argument("--ckpt", default="best_recon_aux",
+                    choices=["best_recon_aux", "best_recon_only", "best"],
+                    help="Which tracked best to encode. Default best_recon_aux, the value formerly "
+                         "hardcoded, so every published cache is bit-identical. exp09 cells must pass "
+                         "best_recon_only: their sweep axis IS the aux term, so an aux-bearing selector "
+                         "would compare cells at checkpoints chosen by different rules (ADR-0012 A3).")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--pool", default=None, help="Default: processed/subset/new_task_pool.parquet")
     ap.add_argument("--out-dir", default=None, help="Default: experiments/new_task/mu_cache")
@@ -164,7 +170,7 @@ def main() -> int:
     npz_index = index_pool_npz(seq_dir, set(pool["tic_id"].astype(int)))
     log.info(f"indexed first-segment npz for {len(npz_index)} pool TICs")
 
-    base = torch.load(ckpt_dir / "B_seed0" / "best_recon_aux.pt", map_location="cpu", weights_only=False)
+    base = torch.load(ckpt_dir / "B_seed0" / f"{args.ckpt}.pt", map_location="cpu", weights_only=False)
     window = int(base["cfg"]["data"]["window"])  # all arms of one cell + untrained share the exp01 window (256)
     blocks_by_split = {}
     for split in ["train", "val", "test"]:
@@ -181,7 +187,7 @@ def main() -> int:
                                     window, int(mc["gru_hidden"]), int(mc["gru_layers"]), args.device,
                                     seed=init_seed)
         else:
-            ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / "best_recon_aux.pt", map_location="cpu",
+            ck = torch.load(ckpt_dir / f"B_seed{arm_seed(arm)}" / f"{args.ckpt}.pt", map_location="cpu",
                             weights_only=False)
             model, _ = build_model_from_ckpt(ck, args.device)
         extract_arm(model, blocks_by_split, args.device, cache_path, arm)

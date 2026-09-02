@@ -1,0 +1,336 @@
+# experiments/configs/c1c2_supervised_baselines.yaml
+# ONE manifest = single source of truth for roadmap rows C1 and C2. The resumable queue
+# experiments/run_c1c2_supervised_baselines.ps1 is GENERATED from this file
+# (python -m swm.exp.gen_supervised <this file>) and is never hand-edited.
+#
+# There are no per-cell Hydra YAMLs here, deliberately: swm.train.supervised reads THIS file at run
+# time and is told which (arm, task, seed) to run. gen_sweep could not have been reused anyway -- it
+# asserts window*seq_len == 4096 and emits configs for swm.train's unlabelled sequence dataset, and
+# 5 of the 11 tasks live on a population that has no packed dir at all.
+
+name: c1c2_supervised_baselines
+description: "The two supervised arms of the ML4PS scorecard: C1 = our Conv1D encoder trunk + a task
+              head trained end-to-end per task (the raw-CNN baseline Yue Ma made mandatory, W6, merged
+              with the Y13c supervised ceiling by D20), C2 = the same protocol with the conv trunk
+              replaced by a dense one (Y13b, the independent model-family check)."
+plan: docs/roadmap/2026-08-25-ml4ps-pivot-roadmap.md      # rows C1, C2; decisions D18/D19/D20
+adr: docs/adr/0012-recipe-unfreeze-and-probe-boundary.md  # Decision 3 -- these are EXTERNAL BASELINES, never the probe
+handoff: tmp/handoff/2026-08-28-c1-c2-supervised-baselines-handoff.md
+
+# =====================================================================================================
+# LOCKED DESIGN (grilling session 2026-08-28). Every choice below was taken one at a time; the
+# alternatives that were rejected are recorded with them, because a baseline nobody can attack is
+# worth less than a baseline whose weaknesses are already written down.
+#
+# WHAT THESE ARMS ARE FOR. D16's spine sentence is that SSL mu adds information the engineered
+# features do not already carry. C3/C3b narrowed it (under a nonlinear readout on the same features
+# most of mu's linear-fusion contribution disappears, transit excepted). C1/C2 can only narrow it
+# further, and that is their job: they are the honest ceiling and the honest floor of the scorecard,
+# not arms we are hoping to win against.
+#
+# C1 IS "CEILING B", WHICH THE PROJECT DECLARED ABSENT. swm/eval/new_task_ceiling.py:12 says in as
+# many words: "The B1 supervised ceiling is deliberately absent (it needs GPU training runs); so
+# 'beats engineered features' is claimable from this module and 'closes the supervised gap' is not."
+# This manifest is that hole being filled. CONTEXT.md's `Ceiling B` row is its definition.
+#
+# ---------------------------------------------------------------------------------------------------
+# D-C1.1  WHERE THE CODE LIVES: swm.train.supervised, NOT an extension of swm.train.
+#   swm.train's SeqWindowDataset yields UNLABELLED seq_len-window sequences out of one packed dir.
+#   The 11 tasks sit on TWO disjoint populations, and one of them (the new-task pool, 16,002/3,429/
+#   3,429 stars replayed from processed/sequences/*.npz) has no packed dir -- so five tasks are
+#   unreachable from swm.train without writing a new dataset AND a new packer anyway.
+#   The decisive argument is not cost, it is FAIRNESS BY CONSTRUCTION: C1's protocol requires
+#   "identical splits/pools as the F1 scorecard". If the supervised trainer consumes the SAME loaders
+#   the probe scorers consume (load_first_segment_blocks / replay_first_segment / label_frame and each
+#   task's own keep mask), split identity is a property of the code rather than a claim to re-verify.
+#   Re-deriving populations inside swm.train would have made it a claim.
+#   Consequence: swm.train, its configs and its 133-test suite are untouched by this work.
+#
+# D-C1.2  ARCHITECTURE: the Encoder trunk verbatim, through fc_mu, then a linear head.
+#     Conv1d(1,32,5)-BN-ReLU-MaxPool ... Conv1d(128,256,5)-BN-ReLU-MaxPool  ->  (256, 16) -> 4096
+#     Linear(4096,128)   <- fc_mu, kept, used deterministically (no sampling, no logvar, no KL)
+#     Dropout(0.2)
+#     Linear(128,1)      <- the task head: logit, or regression value
+#   Why the 128-d bottleneck costs nothing: for a SCALAR output, trunk->Linear(4096,128)->Linear(128,1)
+#   and trunk->Linear(4096,1) are the same function class (any 1x4096 functional factors through 128
+#   dims). So this is not a handicapped ceiling -- it is the same ceiling with a state_dict that mirrors
+#   the SSL encoder, which keeps a later weight/representation comparison possible.
+#   REJECTED: a nonlinear head (Linear-ReLU-Linear-ReLU-Linear). It is a higher ceiling, but D20 words
+#   the arm as "trunk + task head", and it would make C1 differ from C2 in two ways at once.
+#
+# D-C1.3  THE LOSS SEES STARS, NOT WINDOWS.
+#   D20 fixes inference: star score = mean over window logits. Training is then a choice, and the two
+#   options are not equivalent:
+#     broadcast   copy the star label onto each of its ~16 windows, BCE per window. 16x more loss
+#                 terms, and the conventional raw-CNN shape -- but it FORCES the model to call every
+#                 window of a positive star positive. On a localized task that is a manufactured label
+#                 noise, and this project has already measured the consequence (Phase-1: star-level
+#                 transit weakness is dilution, not label noise; true window labels HURT star MIL).
+#     star bag    forward all of a star's windows, mean the logits IN-GRAPH, one class-weighted BCE
+#                 per star. Training objective == the reported statistic. A featureless window is then
+#                 allowed to score ~0 while the one eclipse window carries the bag.
+#   CHOSEN: star bag. Understating the supervised ceiling exactly on the localized tasks -- the only
+#   place C3b left the fusion claim alive -- would bias the paper in our own favour.
+#
+# D-C1.4  BAG SCOPE = first segment, the same windows mu is pooled over (CONTEXT.md `bag scope`).
+#   16-20 windows per star, 16.2 mean. NOT all-segment: the probe never sees all-segment either, and
+#   the K-matched control exists precisely because bag size alone moves scores.
+#   The remaining asymmetry is disclosed rather than equalised: the SSL encoder was PRETRAINED on all
+#   segments of the v1 train stars (582,352 windows) without labels. That is what self-supervision is;
+#   the paper says so instead of pretending the two arms saw the same bytes.
+#
+# D-C1.5  SELECTION: best val headline metric, patience 10, cap 60 epochs; test scored ONCE.
+#   Both populations carry a `val` split that no probe has ever touched (v1 2,021 stars; pool 3,429),
+#   so early stopping leaks nothing. Selecting on val LOSS was rejected: at 6-12% prevalence the
+#   val-BCE minimum and the val-PR-AUC maximum routinely sit many epochs apart, which would depress
+#   the ceiling -- again the self-flattering direction.
+#   exp09's selection-sanity check is carried over: FLAG any run whose selected epoch is 0 or the cap.
+#   A flagged run is reported, not silently shipped.
+#
+# D-C1.6  REGULARISATION: one pre-registered setting for all 11 tasks, no per-task tuning.
+#   AdamW(lr 3e-4, weight_decay 1e-4) + Dropout(0.2) before the head + the val early stopping.
+#   Two cells train ~1.6M parameters on very few stars -- rotation_period 669 and rgb_vs_heb 755 train
+#   stars -- and a baseline with no explicit regularisation there is a soft target for "of course it
+#   lost". Both cells are FLAGGED small_n in every table and are not used to support a claim in either
+#   direction. Per-task tuning was rejected: it stops being one protocol and it has to be disclosed as
+#   11 separate budgets.
+#
+# D-C1.7  REPORTING. Supervised seeds are init/shuffle seeds; encoder seeds are pretraining seeds.
+#   They are NOT pairable, so every C1-vs-F1 difference is UNPAIRED and says so on the row
+#   (SE = sqrt(se_a^2 + se_b^2)). Absolute score stays the selection quantity (F4).
+#   `recovery fraction` = (probe - floor) / (supervised - floor), floor = prevalence for PR-AUC, 0.5
+#   for ROC-AUC, 0.0 for R2. Per task, NEVER averaged over 11 heterogeneous metrics. Where the probe
+#   beats the supervised arm the row reads "SSL exceeds the supervised baseline", not ">100%".
+#   The metric-native floor is used rather than CONTEXT.md's older `supervised-gap fraction`
+#   (untrained-mu floor) because that floor is itself a frozen LINEAR readout while this ceiling is
+#   end-to-end -- the ratio would mix three capacities, and the gap metric is already on record as not
+#   capacity-invariant. CONTEXT.md gains `recovery fraction` and scopes the older term rather than
+#   overwriting it.
+#
+# D-C1.9  INPUT SCOPE IS A NAMED LIMITATION, NOT A GAP TO CLOSE (decided 2026-08-28, after the pilot).
+#   Both arms see the star's FIRST SEGMENT only (16-20 windows, ~5.7 d), because that is the probe's
+#   bag scope. A reviewer will ask why a supervised baseline was not given all of each star's data
+#   (median 32 windows, mean 62, max 816). The answer is that equal access is what makes C1 minus the
+#   probe isolate SUPERVISION rather than "supervision plus 4x more data per star", and an all-segment
+#   supervised arm would also re-open the bag-size confound the K-matched control exists to price.
+#   Consequence for the paper, written as a limitation paragraph rather than argued if challenged:
+#   our supervised number bounds the labelled ceiling AT THE PROBE'S INPUT SCOPE, not in general.
+#   No all-segment arm is run. If one is ever wanted it is a v2/journal cell, not a pre-submission one.
+#
+# D-C1.10 WHAT THE PILOT ALREADY SHOWS ABOUT THE CLAIM (seed 0, recorded before the full queue so the
+#   framing cannot be back-fitted). The supervised ceiling lands ON the fusion probe: recovery 0.98-1.03
+#   on seven of eleven tasks, and the probe EXCEEDS it on transit (2.04x), rgb_vs_heb and
+#   rotation_period (both small_n) and osc_giant. The claim this licenses is NOT "SSL matches
+#   supervision"; it is "SSL matches what this architecture reaches on the labels that exist"
+#   (9,428-16,002 labelled stars), which is the W6 semi-supervised argument and must be worded as such.
+#   Also measured and to be printed rather than smoothed over: five of eleven tasks overfit after their
+#   selected epoch (rotation_period val R2 0.581 -> -0.147, transit -42%, numax_hon -40%, ijspeert -23%,
+#   solar_like_osc -17%), so W13's "no overfit" holds AT THE REPORTED CHECKPOINT and early stopping is
+#   doing real work. That the labelled sets are small enough to overfit in 10-20 epochs is itself
+#   evidence for the semi-supervised framing, not an embarrassment to hide.
+#
+# D-C1.8  flare IS RUN, and its printability is a separate question. L1's reporting rule (B) leaves
+#   flare unprintable until the manual visual pass lands. That governs the WRITE-UP, not whether the
+#   cell exists; a hole in the 11x7 figure is worse than a row with a stated status.
+#   ijspeert_excl_villanova is NOT run (ADR-0010: one probe per physical quantity).
+# =====================================================================================================
+
+# ---------------------------------------------------------------------------------- base training knobs
+# Identical for every (arm, task, seed). Nothing here is tuned per task.
+base:
+  window: 256                 # cadences per window; the geometry every arm on the scorecard shares
+  batch_stars: 64             # ONE batch = 64 stars = ~1,040 windows; the loss is per star, not per window
+  max_epochs: 60
+  patience: 10                # epochs with no val-metric improvement before stopping
+  lr: 0.0003
+  weight_decay: 0.0001
+  dropout: 0.2                # before the task head only; the trunk is unregularised, as in the SSL encoder
+  amp: true
+  grad_clip: 1.0
+  num_workers: 0              # Windows-spawn-safe; the whole population is resident in RAM anyway
+  z_dim: 128                  # width of the shared bottleneck (fc_mu in the SSL encoder)
+  class_weighted: true        # BCEWithLogits pos_weight = n_neg / n_pos, computed on the TRAIN split
+  select_on: metric           # metric | loss  -- see D-C1.5
+  flag_selected_epoch: [first, last]   # selection-sanity check: flag a run selecting at epoch 0 or the cap
+
+# ---------------------------------------------------------------------------------------------- arms
+# Two arms, differing in the trunk and NOTHING else -- same bottleneck, same head, same pooling, same
+# optimiser, same selection rule. That is what makes C1 - C2 read as "the convolutional inductive bias"
+# rather than as an uncontrolled architecture-and-input change.
+arms:
+  conv_supervised:
+    roadmap_row: C1
+    trunk: conv               # swm.models.encoder.Encoder's conv stack, verbatim
+    enc_channels: [32, 64, 128, 256]
+    kernel_size: 5
+    seeds: [0, 1, 2]          # D20: 3 seeds, the venue norm (ml4ps-writeup-tips T10)
+  mlp_raw:
+    roadmap_row: C2
+    trunk: dense              # Linear(256,256)-ReLU-Linear(256,128)-ReLU, then the same fc_mu/head
+    hidden: [256, 256]
+    seeds: [0, 1, 2]
+
+# --------------------------------------------------------------------------------------------- tasks
+# The 11 rows of the D18 scorecard: the 4 v1 variability tasks + the 7 ADR-0010 probes.
+# `population`  v1   = experiments/exp01_window256_seq16/packed  (first segment per star)
+#               pool = processed/subset/new_task_pool.parquet replayed from processed/sequences/*.npz
+# `keep`        the population mask, which MUST be the one the F1 scorer applies. Named here so the
+#               test suite can assert the supervised split equals the probe split star-for-star.
+# n_train/n_val/n_test are MEASURED (2026-08-28), recorded so a silent population change is visible.
+tasks:
+  - name: pulsating
+    block: v1
+    population: v1
+    shape: detection
+    metric: pr_auc
+    label: {source: variability_labels_star, column: pulsating, missing_is: 0}
+    keep: all
+    n: {train: 9428, val: 2021, test: 2021, pos_train: 1009, pos_val: 217, pos_test: 216}
+  - name: eb
+    block: v1
+    population: v1
+    shape: detection
+    metric: pr_auc
+    label: {source: variability_labels_star, column: eb, missing_is: 0}
+    keep: all
+    n: {train: 9428, val: 2021, test: 2021, pos_train: 886, pos_val: 194, pos_test: 196}
+    # the footing task: F1 publishes features-linear 0.742 and mu-linear 0.7710 here at readout `mean`
+  - name: rotation
+    block: v1
+    population: v1
+    shape: detection
+    metric: pr_auc
+    label: {source: variability_labels_star, column: rotation, missing_is: 0}
+    keep: all
+    n: {train: 9428, val: 2021, test: 2021, pos_train: 789, pos_val: 169, pos_test: 180}
+  - name: transit
+    block: v1
+    population: v1
+    shape: detection
+    metric: pr_auc
+    label: {source: variability_labels_star, column: transit, missing_is: 0}
+    keep: all
+    n: {train: 9428, val: 2021, test: 2021, pos_train: 569, pos_val: 122, pos_test: 122}
+    # the localized task, and the only one where mu's fusion contribution GREW under a nonlinear
+    # readout (C3b +0.027 -> +0.041). The star-bag loss (D-C1.3) matters most here.
+  - name: ijspeert
+    block: menu
+    population: v1
+    shape: detection
+    metric: pr_auc
+    label: {source: ijspeert2024_bright, column: ijspeert, missing_is: 0}
+    keep: all
+    n: {train: 9428, val: 2021, test: 2021, pos_train: 396, pos_val: 83, pos_test: 93}
+  - name: rotation_period
+    block: menu
+    population: v1
+    shape: regression
+    metric: r2
+    target_transform: linear     # matches score_rotation_period_from_mu: NOT logged
+    label: {source: variability_labels_star, column: rotation_period}
+    keep: tars_rotator_le5d      # rotation == 1 AND rotation_period notna AND <= 5 d
+    small_n: true
+    n: {train: 669, val: 140, test: 150}
+  - name: osc_giant
+    block: menu
+    population: pool
+    shape: detection
+    metric: pr_auc
+    label: {source: new_task_labels_star, column: osc_giant, missing_is: 0}
+    keep: all
+    n: {train: 16002, val: 3429, test: 3429, pos_train: 6157, pos_val: 1319, pos_test: 1313}
+  - name: solar_like_osc
+    block: menu
+    population: pool
+    shape: detection
+    metric: pr_auc
+    label: {source: new_task_labels_star, column: solar_like_osc, missing_is: 0}
+    keep: all
+    n: {train: 16002, val: 3429, test: 3429, pos_train: 1926, pos_val: 414, pos_test: 417}
+  - name: flare
+    block: menu
+    population: pool
+    shape: detection
+    metric: pr_auc
+    label: {source: variability_labels_star.flare_ever, column: flare, missing_is: 0}
+    keep: all
+    n: {train: 16002, val: 3429, test: 3429, pos_train: 1416, pos_val: 302, pos_test: 304}
+    printability: blocked_on_L1_visual_pass    # D-C1.8: run it, do not print it yet
+  - name: numax_hon
+    block: menu
+    population: pool
+    shape: regression
+    metric: r2
+    target_transform: log10      # matches REGRESSION's log_target=True in new_task_scorecard
+    label: {source: new_task_labels_star, column: numax_hon}
+    keep: labelled
+    n: {train: 6157, val: 1319, test: 1313}
+  - name: rgb_vs_heb
+    block: menu
+    population: pool
+    shape: contrastive
+    metric: roc_auc
+    label: {source: new_task_labels_star, column: rgb_vs_heb, missing_is: null}
+    keep: labelled               # Sreenivas catalog-only population; the one task with a MATCHED negative pool
+    small_n: true
+    n: {train: 755, val: 162, test: 161, pos_train: 487, pos_val: 113, pos_test: 113}
+
+# ------------------------------------------------------------------------------------- floors, for `recovery fraction`
+# Metric-native and capacity-free by construction (D-C1.7). `prevalence` resolves per task to
+# n_test_pos / n_test, which is exactly a random ranker's expected PR-AUC.
+floors:
+  pr_auc: prevalence
+  roc_auc: 0.5
+  r2: 0.0
+
+# ------------------------------------------------------------------------------------------- queue
+# 2 arms x 11 tasks x 3 seeds = 66 runs. Task order is the priority order: a -MaxHours cutoff leaves
+# the LEADING tasks complete. eb first because it is the footing task and its pilot gate is the one
+# with a published number to hit.
+queue:
+  order: [eb, transit, pulsating, rotation, solar_like_osc, flare, numax_hon, osc_giant,
+          ijspeert, rotation_period, rgb_vs_heb]
+  arm_order: [conv_supervised, mlp_raw]
+  pilot:
+    arm: conv_supervised
+    seed: 0
+    tasks: all                 # the seed-0 WAVE: 11 runs, ~25 min. -PilotOnly runs exactly these and stops.
+
+# -------------------------------------------------------------------------------------- pilot gate
+# Pre-registered BEFORE the pilot runs. FAIL on any clause -> fix the trainer, do not hand off the
+# queue. The small_n cells are reported but are not gate clauses (D-C1.6).
+pilot_gate:
+  - every task strictly above its metric-native floor
+  - eb pr_auc >= 0.742          # A1 features-linear, F1 published; a supervised CNN below this is broken
+  - numax_hon r2 >= 0.0         # i.e. beats predicting the training mean
+  - no run with selected_epoch in {0, max_epochs - 1}
+  - train/val curves inspected for the W13 criterion (decent size, stable loss, no overfit)
+
+# ------------------------------------------------------------------------------------------ budget
+budget:
+  pilot_minutes: 12.5          # MEASURED 2026-08-28: 11 conv runs, seed 0, 12.46 min wall on the 4060
+  full_hours: 1.0              # 66 runs; conv 33 at ~3x the pilot, dense arm cheaper per step
+  note: "The handoff's '~2 GPU nights' was out by two orders of magnitude, and my own pre-pilot
+         extrapolation was out by 4x in the same direction. Cause of both: early stopping fires at
+         epochs 15-31, not at the 60-epoch cap, so a run is 20-30 epochs rather than 60. Per-run
+         minutes measured in the pilot: osc_giant 2.36, flare 2.07, solar_like_osc 1.58, transit 1.23,
+         ijspeert 1.20, pulsating 1.05, eb 0.99, rotation 0.90, numax_hon 0.89, rotation_period 0.11,
+         rgb_vs_heb 0.08. Quote mean_minutes from c1c2_absolute.csv, never this line."
+
+# ------------------------------------------------------------------------------------------ outputs
+# Namespaced entirely away from exp09_* and from the mu caches (handoff trap 1: caches key on
+# {arm}.npz with no checkpoint in the key and short-circuit on exists()).
+paths:
+  root: experiments/c1c2_supervised
+  data_cache: experiments/c1c2_supervised/data_cache      # first-segment blocks, per population+split
+  runs: experiments/c1c2_supervised/runs                  # <arm>/<task>/seed<N>/{best.pt,history.csv,DONE.txt}
+  probe_csv: experiments/c1c2_supervised/c1c2_probe.csv   # one row per (arm, task, seed): test scores
+  summary_csv: experiments/c1c2_supervised/c1c2_summary.csv
+  absolute_csv: experiments/c1c2_supervised/c1c2_absolute.csv
+  runner: experiments/run_c1c2_supervised_baselines.ps1
+  readme: experiments/c1c2_supervised_README.md
+
+wandb:
+  mode: online
+  project: stellar-world-model
+  group: c1c2_supervised       # one group, so 66 baseline runs do not mix with encoder runs

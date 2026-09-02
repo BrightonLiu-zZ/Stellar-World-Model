@@ -223,6 +223,38 @@ def dynamics_loss(pred_next: torch.Tensor, target_next: torch.Tensor) -> torch.T
     return F.mse_loss(pred_next, target_next)
 
 
+def decorr_loss(mu_seq: torch.Tensor, feats: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    """
+    exp10 E2: mean squared Pearson correlation between every latent dim and every engineered feature.
+
+    The forensics measured the features --> mu map as nearly LINEAR (F-B: gbm minus ridge = 0.030
+    against a 0.15 bar), so a linear instrument is the indicated one and HSIC/adversarial machinery is
+    not. This is that instrument: pressure to move mu's content OFF the feature manifold, which is what
+    the fusion spine needs if the GBM is to gain from mu rather than merely use it (F-F).
+
+    CORRELATION, never covariance (D-E10.11, the dim-51 hazard): mu's variance is 84-86% concentrated in
+    one dimension, so a covariance penalty would spend nearly all its pressure there and act as a
+    disguised variance penalty on a single dim. Per-dim standardization makes every dim cost the same.
+
+    The statistic is computed on MU, not on the sampled z. Everything the penalty is meant to move --
+    the probe features, the F1 fusion columns, the G10-mech predictability read -- is computed from mu,
+    and sampling noise would only attenuate the estimate. Features arrive already standardized on the
+    train split (their columns are re-centred here anyway, since a batch mean is not the global mean).
+    """
+    # mu_seq: (B, S, z); feats: (B, n_feat) -- one vector per star, shared by that star's S windows
+    bsz, seq_len, z_dim = mu_seq.shape
+    z = mu_seq.reshape(bsz * seq_len, z_dim).float() # (B*S, z); fp32 for a stable correlation under AMP
+    f = feats.unsqueeze(1).expand(bsz, seq_len, feats.shape[-1]) # (B, S, n_feat) -- broadcast, no copy
+    f = f.reshape(bsz * seq_len, feats.shape[-1]).float() # (B*S, n_feat)
+    n = z.shape[0]
+    z = z - z.mean(dim=0, keepdim=True)
+    z = z / (z.std(dim=0, unbiased=False, keepdim=True) + eps) # per-dim batch standardization
+    f = f - f.mean(dim=0, keepdim=True)
+    f = f / (f.std(dim=0, unbiased=False, keepdim=True) + eps)
+    corr = (z.t() @ f) / n # (z, n_feat) Pearson correlations, both sides already unit-variance
+    return (corr**2).mean()
+
+
 def smoothness_loss(mu_seq: torch.Tensor) -> torch.Tensor:
     """
     exp08 dynamics-free temporal prior: MSE between consecutive latents (an SFA-style slowness

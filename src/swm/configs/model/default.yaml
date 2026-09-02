@@ -4,4 +4,5 @@ enc_channels: [32, 64, 128, 256] # 4 conv stages, each halves length via MaxPool
 kernel_size: 5
 gru_hidden: 256 # dynamics GRU hidden size
 gru_layers: 1
+decoder_cond_dim: 0 # exp10 E1: extra width on the decoder's FIRST fc so it consumes [z, standardized star features] (25 for the exp10 feature table). The ENCODER is untouched, so capacity-matched untrained references stay valid (D-E10.7). 0 = inert, exp00-09 decoder bit-identical
 dyn_mode: fwd # latent-dynamics objective (exp05): fwd = one-step forward only (exp00-04, default); fwd_bwd = also predict the time-reversed sequence via a separate backward GRU. fwd keeps the state_dict tree exp04-identical (strict-load reuse).

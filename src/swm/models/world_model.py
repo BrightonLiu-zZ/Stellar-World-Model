@@ -38,6 +38,11 @@ class WorldModel(nn.Module):
                        encoder is pressured toward predictability under a fixed random function and
                        still receives gradient through the (non-detached) prediction inputs, but
                        nothing about the dynamics is learned.
+
+    decoder_cond_dim (exp10 E1) feeds the star's standardized engineered features to the DECODER only.
+    The encoder never sees them, so every capacity-matched untrained reference stays valid (D-E10.7)
+    and mu remains a pure function of flux; what changes is only what mu still has to encode. The
+    default 0 leaves the state_dict and every forward value bit-identical to exp00-09.
     """
 
     def __init__(
@@ -50,13 +55,16 @@ class WorldModel(nn.Module):
         gru_hidden: int,
         gru_layers: int,
         dyn_mode: str = "fwd",
+        decoder_cond_dim: int = 0,
     ) -> None:
         super().__init__()
         assert dyn_mode in ("fwd", "fwd_bwd", "multistep", "smooth", "linear_fbwd", "frozen_fbwd"), \
             f"unknown dyn_mode {dyn_mode!r}"
         self.dyn_mode = dyn_mode
+        self.decoder_cond_dim = decoder_cond_dim
         self.encoder = Encoder(in_ch, enc_channels, kernel_size, z_dim, window)
-        self.decoder = Decoder(in_ch, enc_channels, z_dim, self.encoder.bottleneck_len)
+        self.decoder = Decoder(in_ch, enc_channels, z_dim, self.encoder.bottleneck_len,
+                               cond_dim=decoder_cond_dim)
         if dyn_mode == "smooth":
             # exp08 smoothness arm: no learned dynamics of any kind; the loss computes the
             # first-difference penalty directly on mu_seq, so no predictor parameters exist.
@@ -86,13 +94,19 @@ class WorldModel(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def forward(self, x_seq: torch.Tensor) -> dict[str, torch.Tensor]:
-        # x_seq: (B, S, window, 1)
+    def forward(self, x_seq: torch.Tensor, feats: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+        # x_seq: (B, S, window, 1); feats: (B, n_feat) one standardized vector per star, or None
         bsz, seq_len = x_seq.shape[0], x_seq.shape[1]
         flat = x_seq.reshape(bsz * seq_len, x_seq.shape[2], x_seq.shape[3]) # (B*S, window, 1)
         mu, logvar = self.encoder(flat) # (B*S, z), (B*S, z)
         z = self.reparameterize(mu, logvar) # (B*S, z)
-        recon = self.decoder(z) # (B*S, window, 1)
+        cond = None
+        if self.decoder_cond_dim > 0:
+            assert feats is not None, "model.decoder_cond_dim > 0 but the batch carried no features"
+            # Every window of a sequence belongs to the same star, so one feature vector is repeated
+            # across its S rows to line up with the flattened latents.
+            cond = feats.unsqueeze(1).expand(bsz, seq_len, feats.shape[-1]).reshape(bsz * seq_len, -1)
+        recon = self.decoder(z, cond) # (B*S, window, 1)
 
         recon_seq = recon.reshape(bsz, seq_len, recon.shape[1], recon.shape[2]) # (B, S, window, 1)
         z_dim = mu.shape[1]

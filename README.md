@@ -51,7 +51,7 @@ See [docs/STATUS.md](docs/STATUS.md) for current counts and progress on each sta
 - **v1 — variability (primary):** binary `[rotation, transit]` per star
   - Rotation: TARS (Boyle, Bouma & Mann 2026)
   - Transits: NASA Exoplanet Archive TOI (non-retired only)
-  - Flares: flatwrm2 (Vida et al. 2025) — produced and retained in `variability_labels_star.csv`, excluded from v1 eval (see `docs/adr/0001-drop-flare-from-v1-eval.md`)
+  - Flares: Seli et al. 2025 (catalog; `flatwrm2` is the detector, Vida et al. 2021) — produced and retained in `variability_labels_star.csv`, excluded from v1 eval (see `docs/adr/0001-drop-flare-from-v1-eval.md`)
 - **v1-supplementary — rotation period:** `rotation_period` (days) regression on the rotation=1 subset; same frozen encoder, linear regression head
 - **v1b — spectroscopic (supplementary):** {Teff, log g, [Fe/H]} — APOGEE DR17 → Gaia DR3 GSP-Spec → LAMOST DR11 (priority fallback); ~13.8% match rate on this bright sample
 
@@ -122,7 +122,7 @@ docs/
 ## References
 
 - **TARS** — Boyle, A. W., Bouma, L. G., & Mann, A. W. (2026). *TESS All-Sky Rotation Survey*. arXiv:2603.05586. Data: Zenodo record 19917941 (v2, current).
-- **flatwrm2** — Vida, K., et al. (2025). *flatwrm2 TESS flare catalog, sectors 1–69*. A&A. arXiv:2412.12989. Data: Zenodo (public).
+- **Flares** — Seli, B., Vida, K., Oláh, K., Görgei, A., Soós, Sz., Pál, A., Kriskovics, L., & Kővári, Zs. (2025). *Stellar flare morphology with TESS across the main sequence*. A&A. arXiv:2412.12989. 121,895 vetted flares, sectors 1–69, 2-min PDCSAP. Data: Zenodo (public). The detector `flatwrm2` is Vida, K., et al. (2021), an LSTM built for *Kepler*; Seli et al. retrained it for TESS and produced this catalog. Cite the catalog as Seli+2025, never as "Vida et al. 2025".
 - **TOI** — NASA Exoplanet Archive TESS Object of Interest list. Accessed via `astroquery.ipac.nexsci`.
 - **APOGEE DR17** — Abdurrouf et al. (2022). VizieR `III/286/catalog`.
 - **Gaia DR3 GSP-Spec** — Recio-Blanco et al. (2023). VizieR `I/355/paramp`.

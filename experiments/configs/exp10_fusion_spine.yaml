@@ -1,0 +1,352 @@
+# experiments/configs/exp10_fusion_spine.yaml
+# ONE manifest = single source of truth for exp10. Per-cell Hydra YAMLs under
+# src/swm/configs/experiment/exp10/ and experiments/run_exp10_fusion_spine.ps1 are GENERATED
+# from this file (python -m swm.exp.gen_sweep <this file>) - never hand-edited.
+
+name: exp10_fusion_spine
+description: "Three encoder-side levers aimed at making mu complementary to the 25 engineered
+              features, so the fusion arm's contribution survives a nonlinear readout: a
+              feature-conditioned decoder, a linear decorrelation penalty, and free-running
+              multi-step dynamics pressure - all one-knob deltas on the shipping hann0p3 recipe"
+plan: docs/plans/2026-08-30-exp10-fusion-spine.md
+adr: null   # no hard-constraint change in this wave; ADR-0013 (fc-dims-are-hyperparameters ruling)
+            # becomes MANDATORY the moment any exp10 cell ships into a recipe (D-E10.7)
+
+# =====================================================================================================
+# LOCKED DESIGN (grilling session 2026-08-29/30; forensics wave 2026-08-29/30)
+#
+# ORIGIN. The paper's spine claim - "features (+) mu beats features" - survives a LINEAR readout on
+# 7/11 tasks but only 4/11 under GBM and 0/11 under MLP (C3b), and swapping the encoder across four
+# exp09 cells does not move that verdict. C1 showed fusion is never beaten by an end-to-end supervised
+# model (0/11), so the asymmetry is: mu is weak alone, strong in linear combination, and mostly
+# rebuildable by a nonlinear readout on the features. exp10 attacks that directly: make mu carry
+# content the features CANNOT express, so the fusion delta stops being linear-readout compensation.
+#
+# THE FORENSICS THAT SHAPED THIS (experiments/exp10_forensics_README.md, 2026-08-29/30, zero GPU):
+#   - No readout-side lever moves the C3b GBM survival count above 4/11 (PCA best 5 with two
+#     effect-size-zero rows; window stats 4; fair tuning 4). => exp10 MUST be encoder-side.
+#   - F-A: PCA truncation lifts the UNTRAINED arm as much as the trained one. Dilution is a mechanism,
+#     not a lever. z32/z16 cells are NOT promoted (and a trained bottleneck is not predicted to beat
+#     PCA - untested either way).
+#   - F-B: the map features -> mu is nearly LINEAR (gbm - ridge = 0.030 vs the 0.15 bar), so linear
+#     instruments suffice; HSIC/adversarial machinery is NOT indicated. Dim 51 holds 84-86% of mu's
+#     variance and is 99% feature-predictable (the dim-51 hazard, D-E10.11). ~35% of the content the
+#     probes USE is not GBM-recoverable from features (probe-coefficient-weighted predictability
+#     0.6491) - that residual is what these cells try to grow.
+#   - F-C: window statistics double transit's GBM delta (+0.041 -> +0.081, trained gain 3x the
+#     untrained twin) - a real localized-channel asset, but a POOLING change = readout change under
+#     ADR-0012 d3: external baseline forever, never the spine. No well-specified training objective
+#     translates it, so there is no window-level CELL in this wave (D-E10.4).
+#   - F-F: the GBM uses mu heavily (36-91% of split gain on flat-delta tasks) and gains nothing -
+#     "uses-without-gain", NOT redundancy-and-ignore. An objective that only removes redundancy is
+#     aimed at the wrong thing; the cells below aim to CREATE residual content (E1 by making redundant
+#     encoding unnecessary, E2 by making it costly, E4 by amplifying the one term measured to create
+#     feature-complementary content - exp08: unsatisfiable prediction pressure).
+#
+# DECISION LOG (grill 2026-08-29/30, user in the loop; every entry names its rejected alternative):
+#   D-E10.1  SCOPE: journal-track effect experiment, run on free GPU nights now. The ML4PS paper keeps
+#            the scoped D19 claim and hann0p3 REGARDLESS of exp10's outcome; D17 is not reopened.
+#            Rejected: pre-submission paper-changing scope (rule 6 + draft risk); pure post-Sept-12
+#            (wastes free nights).
+#   D-E10.2  SUCCESS CONDITION: (a) with an effect-size floor - the cell's fusion-features delta under
+#            GBM (C3b machinery, readout mean) survives on MORE than 4/11 where survive = >2*SE AND
+#            |delta| >= 0.01, transit retained. (c)-style mechanism metrics are SECONDARY, reported
+#            never gated. PROVISIONAL: Yue Ma has final authority on scoping and interpretation;
+#            nothing here is final until her review (user 2026-08-29, repeated 2026-08-30).
+#            Rejected: (c) as primary (optimises the mechanism metric directly); bare 2*SE (F-A/F-F
+#            each minted survivors at delta 0.001-0.004).
+#   D-E10.3  ENCODER-SIDE forced by the forensics headline (readout ceiling 4/11).
+#   D-E10.4  CELL SET: cond_dec + decorr + multistep. Considered and EXCLUDED, with the evidence:
+#            z32/z16 (F-A refuted the promoting evidence), whalf (conv-channel change = architecture),
+#            HSIC/adversarial decorrelation (R-B1 did not fire - the map is linear), a window-level
+#            training cell (no specified objective; F-C's +0.081 stays a journal readout baseline),
+#            aug_hfnoise (a third floor experiment; sigma rule vacuous - exp09 record).
+#   D-E10.5  SEEDS: 6 per cell, FINAL - no 12-seed extension, per Yue Ma W9 (user 2026-08-30).
+#            Standing caveat recorded, not overridden: a 6-seed gate pass has failed to replicate
+#            three times in this project (wave-6 dose, wave-6 probe, wave-7 artifact). Any exp10 gate
+#            pass is therefore labelled PROVISIONAL-AT-6-SEEDS in every output.
+#   D-E10.6  NO dyn-off twins in this wave (user 2026-08-30): 18 runs total. Consequence, stated:
+#            the dynamics-specificity contrast (fbwd - off; positive 11/11 on the incumbent) CANNOT
+#            be computed for E1/E2, and open decision #5 ("does not break the dynamics contrast")
+#            stays unmeasured. Recorded option, not scheduled: a post-hoc off twin for any cell that
+#            passes G10-spine (exp09 wave-6 precedent).
+#   D-E10.7  ARCHITECTURE RULING (user 2026-08-29): the conv stacks are "the architecture" the
+#            CLAUDE.md lock protects; fc/bottleneck dims (z_dim, and the decoder's fc input width
+#            that decoder_cond_dim extends) are training hyperparameters. ADR-0013 records this iff
+#            any exp10 cell ships. Encoder is UNTOUCHED in every cell -> the existing capacity-matched
+#            untrained reference stays valid for every probe (no new untrained refs needed).
+#   D-E10.8  free_bits stays 0.0 (match the reference exactly; wave 7 measured the 0.01 floor binding
+#            on pulsating). Collapse is watched via val_recon + KL_total (n_active is RETIRED).
+#   D-E10.9  CHECKPOINT: best_recon_only is the primary read for every exp10 cell (ADR-0012 A3 - the
+#            sweep axis touches the objective, so own-monitor selection differs per cell). The exp07
+#            reference is read at best_recon_aux (its seeds predate best_recon_only.pt); the measured
+#            size of that confound is mean |d| 0.0006-0.0008, max 0.0047 - cited, not assumed.
+#            NOTE for E1: its val_recon includes the conditioning benefit, so val_recon is comparable
+#            WITHIN the cell only; cross-cell comparison happens at the probe, never on loss values.
+#   D-E10.10 FEATURES ENTER TRAINING (E1/E2). They are label-free (computed from the same flux the
+#            model sees), so the self-supervised claim survives, but the wording changes and the
+#            journal write-up must say so (venue precedent: Makinen+ 2024 hybrid summary statistics -
+#            arXiv:2407.18909, 2410.07548 - learn neural summaries capturing only information
+#            complementary to a fixed hand-crafted set). Standardization constants come from the
+#            TRAIN split only; a star missing features gets the standardized zero vector (train mean)
+#            and is COUNTED - the count prints in the smoke and the README.
+#   D-E10.11 DIM-51 HAZARD: E2's penalty is a mean squared CORRELATION on per-dim batch-standardized
+#            z (never covariance), so no dim's variance share buys it extra pressure; E1 deletes
+#            nothing by construction (redundant encoding becomes unnecessary, not forbidden).
+#            Rejected: subspace-restricted penalties (post-hoc dim choice = selection on the outcome).
+#   D-E10.12 ESTIMATOR UPGRADES (measured, not argued): G10-spine pairs the 2*SE rule with the 0.01
+#            effect floor; small-n rows (rgb_vs_heb, rotation_period, ijspeert) additionally need a
+#            draw/bootstrap CI excluding 0 (F-E: draw spread beats encoder-seed spread 5-15x there);
+#            per-seed scatter prints beside every cell aggregate (P10's median hid a 16x sd ratio).
+#
+# PRE-REGISTERED PREDICTIONS (written before any run; mismatches are RECORDED, never snapped to the
+# nearest branch - P8 / P11-F / P12 precedent):
+#   P-E10-1 (cond_dec):   (a) predictability falls AND G10-spine passes -> the lever works;
+#                         (b) predictability falls, spine count stays <= 4 -> content was created but
+#                             is not probe-relevant (the R-B2 warning arriving on schedule);
+#                         (c) val_recon collapses toward the conditioning (mu goes uninformative,
+#                             KL -> 0) -> G10-valid catches it; the cell is void, not "negative".
+#   P-E10-2 (decorr):     same three branches, plus (d) the conflict signature - val_recon rises
+#                         while achieved corr2 falls: the penalty is fighting reconstruction for the
+#                         amplitude channel. If (d) co-occurs with a spine pass it is a finding, not
+#                         a bug; if with a fail, the conditioning route (E1) was the right instrument.
+#   P-E10-3 (multistep):  (a) rollout pressure grows complementary content (mu_perp-over-untrained
+#                         rises, spine count rises) -> the exp08 mechanism generalises;
+#                         (b) probe holds but complementarity flat -> pressure is already saturated
+#                             at one step (F25c's switch-not-dial extending to the horizon axis);
+#                         (c) latent narrows / collapses (exp08 smooth-style) -> G10-valid.
+#   P-E10-4 (cross-cell): if BOTH E1 and E2 move predictability but neither passes G10-spine while E4
+#                         does neither, the honest conclusion is that the spine cannot be widened at
+#                         this architecture+data and the scoped claim is the final claim - that
+#                         negative is publishable in the journal version and closes the question.
+#
+# GATES, in the order applied (VOID rule: validity BEFORE probe; a void seed's probe is not evidence):
+#   G10-valid    per cell: (i) dose = lambda*dyn/recon, last-10-epoch mean, cell mean in [0.6, 1.4]
+#                and no seed below 0.3 (dyn cells; for E1/E2 dose uses the unchanged fwd_bwd term);
+#                (ii) no seed with val_recon > 1.10 or KL_total < 0.1 (collapse - wave-6 collapsed
+#                seed read 1.201 / 0.000 vs healthy 0.81-0.87); (iii) median selected epoch >=
+#                beta_warmup_epochs + 5. n_active is not consulted (retired).
+#   G10-noregress per cell vs exp07_hann0p3_fbwd seeds 0-5, paired by seed, 4 v1 tasks x {mean,
+#                mean_std}: FAIL if any task regresses beyond 2*SE at either readout (exp09 G9 form).
+#   G10-spine    PRIMARY (D-E10.2): C3b fan on the cell's mu - fusion-features under GBM at readout
+#                mean, 6 seeds paired incl. GBM random_states; survive = >2*SE AND |delta| >= 0.01;
+#                small-n rows also need the draw/bootstrap CI excluding 0; PASS iff count > 4 of 11
+#                AND transit is among the survivors. flare is reported, never claimed (L1).
+#   G10-mech     SECONDARY, reported never gated: E1/E2 - probe-coefficient-weighted GBM
+#                predictability of mu from features (analyze_exp10_fb_mu_predictability) vs the
+#                reference's 0.6491 (down = content moved off the feature manifold), plus E2's
+#                achieved mean corr2 vs the reference's measured value; E4 - residual-variance
+#                asymmetry + rollout-vs-persistence (exp08 signature suite); ALL - mu_perp_full over
+#                untrained, reference average +0.112.
+# =====================================================================================================
+
+env:
+  python: C:/Users/user1/miniconda3/envs/swm/python.exe
+  pythonpath: src
+
+paths:
+  repo_root: C:/git_repo/Stellar-World-Model
+  subset_dir: processed/subset                        # shared split; never rebuilt per experiment
+  packed_sources:
+    w256: experiments/exp01_window256_seq16/packed    # exists (exp01 Path-A subdivision pack)
+
+# -----------------------------------------------------------------------------------------------------
+# PREREQUISITES - must exist and be verified BEFORE gen_sweep is run for real (the smoke test covers
+# all three; see sweep.smoke below):
+#   1. FEATURES FILE: experiments/exp10_features/subset_features25.parquet - the 25 engineered
+#      features for EVERY TIC in processed/subset (train+val+test), built from the same
+#      cached_subset_features source F1 uses, with train-split standardization constants stored as
+#      parquet metadata. The build script prints per-split coverage; missing stars get the
+#      standardized zero vector and the count is recorded (D-E10.10).
+#   2. CODE (all inert by default; exp00-09 configs must stay bit-identical - pinned by tests):
+#        model.decoder_cond_dim (int, default 0): when 25, the decoder's first fc consumes
+#          z_dim + decoder_cond_dim and the forward pass concatenates the star's standardized
+#          feature vector to z before decoding. Encoder untouched.
+#        train.decorr_weight (float, default 0.0): adds decorr_weight * mean_{d,f} corr2(z_d, feat_f)
+#          computed per batch on batch-standardized z_d and pre-standardized features; logged as
+#          train/decorr and val/decorr (its OWN channel - never contaminates val/aux, same rule as
+#          impulse_penalty_weight).
+#        train.features_path (str|null, default null): when set, the dataset returns (x, feats) and
+#          the loop threads feats to whichever consumer is active. Loading keys on the packed
+#          sequence's TIC via the pack index.
+#      dyn_mode=multistep already exists and is tested (exp05 machinery; state_dict identical to fwd).
+#   3. TESTS: src/swm/tests/test_exp10_cells.py - composes each cell through Hydra with the exact
+#      "+experiment=" string the runner emits and drives one real run_epoch on synthetic data;
+#      asserts (i) both new knobs' gradients reach the encoder, (ii) decoder_cond_dim=0 AND
+#      decorr_weight=0.0 reproduce the exp09 code path bit-identically, (iii) the features join
+#      covers every star in the synthetic pack. Plus the PS 5.1 runner -DryRun.
+# -----------------------------------------------------------------------------------------------------
+
+base: # every knob written out = the hann0p3 recipe at 256x16 (exp07 winner; 12-seed reference exists)
+  data:
+    seq_len: 16
+    window: 256
+    n_quiet: 10000
+    val_frac: 0.15
+    test_frac: 0.15
+    max_absmax: 20.0     # pack-time guard (inert for junctioned packs)
+    num_workers: 0       # Windows-spawn-safe
+    pack_workers: 8
+    batch_size: 256
+    limit: null
+  model:
+    z_dim: 128
+    in_ch: 1
+    enc_channels: [32, 64, 128, 256]
+    kernel_size: 5
+    gru_hidden: 256
+    gru_layers: 1
+    dyn_mode: fwd_bwd          # multistep cell overrides
+    decoder_cond_dim: 0        # NEW (inert): 25 = decoder consumes [z, standardized features] (E1)
+  train:
+    lambda_dyn: 60             # per-cell from constants.lambda_guess; seed-0 run IS the pilot
+    beta_target: 0.1
+    beta_warmup_epochs: 10
+    free_bits: 0.0             # D-E10.8: match the reference; wave-7 floor binds on pulsating
+    lr: 0.0003
+    lr_schedule: cosine
+    lr_min: 3.0e-6
+    max_epochs: 100
+    patience: 10
+    grad_clip: 1.0
+    amp: true
+    accum_steps: 1
+    active_unit_kl_threshold: 0.01
+    resume: true
+    track_recon_aux_best: true
+    track_recon_only_best: true    # A3: aux-independent checkpoint, the PRIMARY read (D-E10.9)
+    select_include_dyn: false
+    recon_aux:
+      type: combined
+      weight: 0.3
+      psd_normalize: false
+      psd_eps: 1.0e-8
+      hf_weight: 1.0
+      psd_window: hann
+      mask_frac: 0.0
+      mask_span: 8
+      psd_taper_nw: 4.0
+      psd_taper_k: 7
+      spectral_floor: null
+      spectral_floor_mode: clamp
+    impulse_penalty_weight: 0.0
+    decorr_weight: 0.0         # NEW (inert): linear decorrelation penalty weight (E2)
+    features_path: null        # NEW (inert): per-star standardized 25-feature parquet (E1/E2)
+    augment:
+      hf_noise_sigma: 0.0
+      hf_noise_min_uhz: 1000.0
+    wandb:
+      mode: online             # user-terminal runs report W&B online; smokes override to disabled
+      project: stellar-world-model
+      entity: null
+
+recipes: # single recipe: base IS hann0p3; the sweep axis is the complementarity lever
+  hann0p3: {}
+
+constants:
+  # ---- lambda: dose = lambda * train/dyn / train/recon, last 10 epochs, gate [0.6, 1.4], target 1.0.
+  # The runner's seed-0 wave IS the pilot at full ep100 (never early-epoch reads - F13/F25a);
+  # in-gate pilots promote via DONE markers, out-of-gate cells get lambda_new = lambda * (1.0/dose),
+  # seed-0 outputs deleted, THIS FILE updated, regenerate, relaunch (exp09 protocol verbatim).
+  lambda_guess:
+    cond_dec: 60      # conditioning LOWERS recon (decoder gets help) -> dose rises; 60 is the anchor
+                      # and the pilot decides. First-order: recon fell ~9% for the F24 taper change,
+                      # so a within-gate landing is plausible.
+    decorr: 60        # the penalty barely touches the recon/dyn scale ratio; verify.
+    multistep: 20     # rollout MSE compounds over 15 free-running steps, so train/dyn is several
+                      # times the one-step value at the same weights -> lambda must fall. 60/3 is a
+                      # first-order guess; THE PILOT IS THE MEASUREMENT, and multistep is the cell
+                      # most likely to need a recalibration round.
+  decorr_weight_guess: 5.0
+    # scale: the term is a mean of squared correlations in [0, 1] over 128x25 pairs; the reference's
+    # measured value (printed by analyze_exp10_fb_mu_predictability machinery on hann0p3_fbwd mu) is
+    # the calibration anchor. Pilot rule, pre-registered: after the seed-0 run, achieved mean corr2
+    # must fall >= 50% vs the reference while val_recon rises < 5%; if the first clause misses,
+    # multiply the weight by 3 and re-pilot; if the second fires, divide by 3. At most two
+    # recalibration rounds, then the cell runs at the best-available weight and the miss is recorded.
+  feature_standardization: "per-feature mean/sd on the TRAIN split of processed/subset, stored as
+    parquet metadata by the features build; VAL/TEST stars standardized with the SAME constants;
+    missing-feature stars = standardized zero vector, counted (D-E10.10)"
+
+sweep:
+  cells: # within-seed scientific priority order: the two content-creation cells first
+    - exp_name: exp10_cond_dec
+      recipe: hann0p3
+      geometry: w256
+      overrides:
+        model.decoder_cond_dim: 25
+        train.features_path: experiments/exp10_features/subset_features25.parquet
+      prediction: "P-E10-1: decoder stops paying mu for feature-predictable content; F-B
+        predictability falls and the spine count rises above 4"
+    - exp_name: exp10_decorr
+      recipe: hann0p3
+      geometry: w256
+      overrides:
+        train.decorr_weight: 5.0
+        train.features_path: experiments/exp10_features/subset_features25.parquet
+      prediction: "P-E10-2: same target as cond_dec via pressure instead of conditioning; the
+        E1-vs-E2 pair is a one-factor enforcement-mechanism contrast"
+    - exp_name: exp10_multistep
+      recipe: hann0p3
+      geometry: w256
+      overrides:
+        model.dyn_mode: multistep
+        train.lambda_dyn: 20
+      prediction: "P-E10-3: free-running rollout = maximum unsatisfiable prediction pressure, the
+        exp08 mechanism amplified. NOTE: fwd-only, so vs the fbwd reference this is a two-change
+        comparison (bwd removed + rollout added) - stated here, and the gate does not pretend
+        otherwise: G10-spine is about the fusion delta, not about attributing the mechanism"
+  seeds: [0, 1, 2, 3, 4, 5]     # FINAL n per D-E10.5 (Yue Ma W9); no extension wave
+  order: seed-major              # cells are peers -> a -MaxHours cutoff leaves balanced seed coverage
+  budget_hours: 12               # 18 runs at the MEASURED per-run minutes below = 8.9 h at the full
+                                 # 100-epoch schedule, so 12 h holds the sweep plus pilot slack. Early
+                                 # stopping (patience 10) can only shorten it.
+  per_run_minutes: {cond_dec: 29, decorr: 29, multistep: 32}
+    # MEASURED in the 2026-08-30 build smoke on the RTX 4060, steady-state epoch boundary to boundary
+    # on the real w256 pack (140 train + 30 val batches): 17.0 / 17.2 / 18.9 s per epoch, x100 epochs,
+    # rounded up for startup and thermal drift. multistep costs only 11% more than fwd_bwd, not the
+    # 40-50% the pre-smoke guess assumed - the 15-step rollout is 15 GRU cells on (B, z), which is
+    # negligible against the conv stack.
+  resume: {marker: DONE.txt, retries: 1}
+  reused_arms: "exp07_hann0p3_fbwd seeds 0-5 at best_recon_aux = the paired reference (12 seeds exist;
+    only 0-5 are used, matching the cells' n); hann0p3_off + untrained arms reused from the existing
+    exp08_menu_channel caches for the spine fan. NOTHING is retrained."
+  smoke: "test_exp10_cells.py composes every cell via its generated '+experiment=' string and drives
+    one real run_epoch (synthetic pack, both new knobs exercised, gradient reach asserted, features
+    join coverage asserted); then the exact runner command executes with data.limit=50
+    train.max_epochs=2 train.wandb.mode=disabled into a throwaway exp_name, artifacts deleted after.
+    Disclose what the smoke does NOT cover: the 100-epoch schedule, resume, W&B online."
+
+eval:
+  stages: [extract, spine_fan, noregress, mech_fan]
+  variant: B
+  checkpoint: best_recon_only          # PRIMARY (A3); best_recon_aux also shipped, delta reported
+  untrained_reference: "existing capacity-matched untrained arms remain valid for ALL cells - the
+    encoder is architecturally unchanged in every cell (D-E10.7); no new untrained refs"
+  extract: "both populations (subset + 22,860-star menu pool) for all 18 runs into NEW cache dirs
+    experiments/exp10_eval/{subset_mu_cache,mu_cache} (mu-cache trap: keys carry no checkpoint;
+    never write into exp08_menu_channel). Batch ALL arms into ONE new_task_extract invocation -
+    the ~12-min pool-index startup is paid once."
+  spine_fan: "analyze_f1_fusion_scorecard.py --families linear gbm --readouts mean over the 18 new
+    arms + reused reference/untrained arms; G10-spine scored from it with the 0.01 effect floor and
+    draw/bootstrap CIs on the small-n rows (reuse analyze_exp10_fe_subsample's draw machinery)"
+  noregress: "4 v1 tasks x {mean, mean_std}, paired vs exp07_hann0p3_fbwd seeds 0-5 (best_recon_aux;
+    A3 confound cited at its measured size)"
+  mech_fan: "analyze_exp10_fb_mu_predictability on each cell's mu (E1/E2 primary read; also run on
+    E4), mu_perp_full vs untrained for all cells, exp08 signature suite (residual asymmetry) for E4,
+    achieved val/decorr curve for E2"
+  tasks: [eb, pulsating, rotation, transit]                    # v1 block, ALL FOUR always
+  downstream_menu: "ADR-0010 7 probes; flare reported never claimed (L1 visual gate)"
+  followups_not_in_scope: [post-hoc off twin for a G10-spine passer (D-E10.6), 12-seed confirm
+    (explicitly ruled out by D-E10.5), window-level readout adoption (journal R-side, F-C),
+    combined-lever cell (only after a single lever passes)]
+
+outputs:
+  exp_root: experiments/exp10_<cell>                  # {models,results,figs}; packed junctioned
+  features_file: experiments/exp10_features/subset_features25.parquet
+  spine_csv: experiments/exp10_spine_gate.csv         # G10-spine per cell per task, floor + CIs
+  noregress_csv: experiments/exp10_noregress.csv      # paired v1 deltas, both readouts
+  mech_csv: experiments/exp10_mechanism.csv           # predictability / corr2 / asymmetry per cell
+  ckpt_delta_csv: experiments/exp10_ckpt_rule_delta.csv
+  mu_caches: experiments/exp10_eval/{subset_mu_cache,mu_cache}
+  readme: experiments/exp10_README.md                 # the committed record (docs/ + csv gitignored)

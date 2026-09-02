@@ -131,11 +131,18 @@ def pool_stars(mu_blocks: list[np.ndarray], pooling: str) -> np.ndarray:
     return np.stack(feats, axis=0)
 
 
-def fit_readout_scores(readout: str, x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray) -> np.ndarray:
+def fit_readout_scores(readout: str, x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray,
+                       random_state: int = 0) -> np.ndarray:
     """
     Fit one frozen readout on train features and return P(positive) for the test rows.
     Imbalance handling per readout: class_weight for logistic/gbm; the sklearn MLP takes neither
     class_weight nor sample_weight, so the positive rows are oversampled to parity instead.
+
+    `random_state` exists for C3 (roadmap arm 7), which needs a seed axis on the nonlinear readouts so
+    their spread is comparable to the mu arms' 6-seed spread. It DEFAULTS TO 0, which is the value that
+    was hardcoded here before, so every published exp05/exp08/MIL number that rides this function is
+    bit-identical. `logistic` is deterministic and ignores it -- stated rather than left to be inferred
+    from a silently unused argument.
     """
     if readout == "logistic":
         scaler = StandardScaler()
@@ -145,7 +152,7 @@ def fit_readout_scores(readout: str, x_train: np.ndarray, y_train: np.ndarray, x
         clf.fit(x_tr, y_train)
         return clf.predict_proba(x_te)[:, 1]
     if readout == "gbm":
-        clf = HistGradientBoostingClassifier(class_weight="balanced", random_state=0) # gradient-boosted trees
+        clf = HistGradientBoostingClassifier(class_weight="balanced", random_state=random_state) # boosted trees
         clf.fit(x_train, y_train)
         return clf.predict_proba(x_test)[:, 1]
     if readout == "mlp":
@@ -154,10 +161,11 @@ def fit_readout_scores(readout: str, x_train: np.ndarray, y_train: np.ndarray, x
         x_te = scaler.transform(x_test)
         pos = np.flatnonzero(y_train == 1)
         neg = np.flatnonzero(y_train == 0)
-        rng = np.random.default_rng(0)
+        rng = np.random.default_rng(random_state)
         boost = rng.choice(pos, size=max(0, len(neg) - len(pos)), replace=True) # oversample positives to parity
         order = np.concatenate([np.arange(len(y_train)), boost])
-        clf = MLPClassifier(hidden_layer_sizes=(64,), max_iter=500, early_stopping=True, random_state=0)
+        clf = MLPClassifier(hidden_layer_sizes=(64,), max_iter=500, early_stopping=True,
+                            random_state=random_state)
         clf.fit(x_tr[order], y_train[order])
         return clf.predict_proba(x_te)[:, 1]
     raise ValueError(f"unknown readout {readout}")
@@ -237,6 +245,9 @@ def build_model_from_ckpt(ckpt: dict, device: str) -> tuple[WorldModel, dict]:
         z_dim=int(mc["z_dim"]), window=int(cfg["data"]["window"]),
         gru_hidden=int(mc["gru_hidden"]), gru_layers=int(mc["gru_layers"]),
         dyn_mode=str(mc.get("dyn_mode", "fwd")), # exp05 fwd_bwd ckpts carry dynamics_bwd.* -> needed for strict load
+        # exp10 cond_dec ckpts carry a WIDER decoder.fc (z_dim + 25) -> also needed for strict load. The
+        # encoder is identical either way, so mu extraction is unaffected; only the load would fail.
+        decoder_cond_dim=int(mc.get("decoder_cond_dim", 0)),
     ).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()

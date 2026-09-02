@@ -1,0 +1,7 @@
+hann0p3_fbwd_s0
+hann0p3_fbwd_s1
+hann0p3_fbwd_s2
+hann0p3_fbwd_s3
+hann0p3_fbwd_s4
+hann0p3_fbwd_s5
+untrained

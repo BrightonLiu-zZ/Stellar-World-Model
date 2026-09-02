@@ -1,12 +1,12 @@
 # @package _global_
 # GENERATED FROM experiments/configs/exp09_loss_exploit_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
-# exp09_loss_exploit_ladder cell exp09_dpss_impulse_w0p025 (recipe hann0p3, geometry w256)
-# packed: junction experiments/exp09_dpss_impulse_w0p025/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# exp09_loss_exploit_ladder cell exp09_hann_w0p025 (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp09_hann_w0p025/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
 # Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
 #   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
-# P8 applies to the pair - see w0p0125. P11 (wave 6) governs seeds 6-11.
+# P11 applies to the hann pair - see exp09_hann_w0p10.
 
-exp_name: exp09_dpss_impulse_w0p025
+exp_name: exp09_hann_w0p025
 data:
   seq_len: 16
   window: 256
@@ -54,14 +54,14 @@ train:
     psd_normalize: false
     psd_eps: 1.0e-08
     hf_weight: 1.0
-    psd_window: dpss
+    psd_window: hann
     mask_frac: 0.0
     mask_span: 8
     psd_taper_nw: 4.0
     psd_taper_k: 7
     spectral_floor: null
     spectral_floor_mode: clamp
-  impulse_penalty_weight: 0.1
+  impulse_penalty_weight: 0.0
   augment:
     hf_noise_sigma: 0.0
     hf_noise_min_uhz: 1000.0

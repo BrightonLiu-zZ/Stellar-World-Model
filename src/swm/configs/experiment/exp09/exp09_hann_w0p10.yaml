@@ -1,0 +1,71 @@
+# @package _global_
+# GENERATED FROM experiments/configs/exp09_loss_exploit_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
+# exp09_loss_exploit_ladder cell exp09_hann_w0p10 (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp09_hann_w0p10/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
+#   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
+# P11, pre-registered 2026-08-25 BEFORE wave 6 ran. Two questions, scored separately. (1) THE ENCODER DECISION, on exp09_dpss_impulse_w0p025 at 12 seeds: P11-A: G17-artifact holds (severity stays ~1.55, well under 2.0 -- it is already 1.553 +/- 0.054, so 12 seeds tighten rather than move it) AND >= 2 of 4 v1 tasks beat the 12-seed exp07_hann0p3_fbwd by > 2*SE at `mean` AND G9-noregress still passes at BOTH readouts AND the user signs off visually -> THE SWITCH FIRES. w0p025 becomes the ML4PS encoder; F1 re-runs on its mu. This is the EXPECTED branch: eb projects to ~1.32x and rotation to ~2.14x. P11-B: eb fails to cross (ratio stays < 1.0), leaving rotation as the only task above the line -> the switch does NOT fire, hann0p3 ships, and the honest sentence is that the best cell the project produced improved all four v1 tasks but only one significantly, at 12 seeds. NO further seeds. P11-C: severity rises above 2.0 on the new seeds, or a seed collapses and voids the row on G9-dose -> void applied BEFORE the probe is read, as always. (2) THE MECHANISM MULTIPLIER, on the two plain-hann cells against their weight-matched dpss+kurtosis twins (w0p025 1.553, w0p10 2.203). Multiplier at w=0.3 is 6.1x on the floor-subtracted excess (10.611 / 1.741), or 4.05x on the raw ratio. P11-D (multiplier ~weight-independent): hann_w0p025 ~3.5, hann_w0p10 ~7.5. Both fail G17. The kurtosis+DPSS machinery is load-bearing at every pressure. P11-E (multiplier decays with pressure): hann_w0p025 lands ~1.7-2.0 and is a LIVE candidate under G17, in which case plain Hann at low weight is a SIMPLER encoder reaching the same place, and it inherits the full switch rule in (1). P11-F: the two hann points bracket the decay differently than either branch (e.g. hann_w0p025 low but hann_w0p10 far above 7.5) -> recorded as a mismatch and NOT assigned to the nearest branch, per the P8 precedent. Report with `mean` as the headline readout and `mean_std` second (D2). Every wave-6 table names BOTH gates (G9-artifact 1.5 pre-registered, G17-artifact 2.0 encoder).
+
+exp_name: exp09_hann_w0p10
+data:
+  seq_len: 16
+  window: 256
+  n_quiet: 10000
+  val_frac: 0.15
+  test_frac: 0.15
+  max_absmax: 20.0
+  num_workers: 0
+  pack_workers: 8
+  batch_size: 256
+  limit: null
+model:
+  z_dim: 128
+  in_ch: 1
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  kernel_size: 5
+  gru_hidden: 256
+  gru_layers: 1
+  dyn_mode: fwd_bwd
+train:
+  lambda_dyn: 60
+  beta_target: 0.1
+  beta_warmup_epochs: 10
+  free_bits: 0.0
+  lr: 0.0003
+  lr_schedule: cosine
+  lr_min: 3.0e-06
+  max_epochs: 100
+  patience: 10
+  grad_clip: 1.0
+  amp: true
+  accum_steps: 1
+  active_unit_kl_threshold: 0.01
+  resume: true
+  track_recon_aux_best: true
+  track_recon_only_best: true
+  select_include_dyn: false
+  recon_aux:
+    type: combined
+    weight: 0.1
+    psd_normalize: false
+    psd_eps: 1.0e-08
+    hf_weight: 1.0
+    psd_window: hann
+    mask_frac: 0.0
+    mask_span: 8
+    psd_taper_nw: 4.0
+    psd_taper_k: 7
+    spectral_floor: null
+    spectral_floor_mode: clamp
+  impulse_penalty_weight: 0.0
+  augment:
+    hf_noise_sigma: 0.0
+    hf_noise_min_uhz: 1000.0
+  wandb:
+    mode: online
+    project: stellar-world-model
+    entity: null

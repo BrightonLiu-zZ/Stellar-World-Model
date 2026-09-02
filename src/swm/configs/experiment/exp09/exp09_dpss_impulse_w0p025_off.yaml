@@ -1,12 +1,12 @@
 # @package _global_
 # GENERATED FROM experiments/configs/exp09_loss_exploit_ladder.yaml - DO NOT EDIT (edit the manifest and re-run swm.exp.gen_sweep)
-# exp09_loss_exploit_ladder cell exp09_dpss_impulse_w0p025 (recipe hann0p3, geometry w256)
-# packed: junction experiments/exp09_dpss_impulse_w0p025/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
+# exp09_loss_exploit_ladder cell exp09_dpss_impulse_w0p025_off (recipe hann0p3, geometry w256)
+# packed: junction experiments/exp09_dpss_impulse_w0p025_off/packed -> experiments/exp01_window256_seq16/packed (the runner creates it).
 # Running STAND-ALONE (e.g. a pilot under a throwaway exp_name) must add:
 #   paths.packed_dir=C:/git_repo/Stellar-World-Model/experiments/exp01_window256_seq16/packed
-# P8 applies to the pair - see w0p0125. P11 (wave 6) governs seeds 6-11.
+# Dynamics-off counterpart of the switch candidate; exempt from G9-dose (lambda 0). Insurance for the paper's arm contrast, not an input to the switch decision.
 
-exp_name: exp09_dpss_impulse_w0p025
+exp_name: exp09_dpss_impulse_w0p025_off
 data:
   seq_len: 16
   window: 256
@@ -29,9 +29,9 @@ model:
   kernel_size: 5
   gru_hidden: 256
   gru_layers: 1
-  dyn_mode: fwd_bwd
+  dyn_mode: fwd
 train:
-  lambda_dyn: 60
+  lambda_dyn: 0
   beta_target: 0.1
   beta_warmup_epochs: 10
   free_bits: 0.0

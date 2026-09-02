@@ -98,6 +98,10 @@ def load_model(ckpt_path: Path, device: str) -> tuple[WorldModel, dict]:
         z_dim=int(mc["z_dim"]), window=int(cfg["data"]["window"]),
         gru_hidden=int(mc["gru_hidden"]), gru_layers=int(mc["gru_layers"]),
         dyn_mode=str(mc.get("dyn_mode", "fwd")),
+        # exp10 cond_dec ckpts carry a WIDER decoder.fc (z_dim + 25 conditioning features); without
+        # this the strict load fails on shape. The encoder is identical either way, so every mu this
+        # script caches is unaffected.
+        decoder_cond_dim=int(mc.get("decoder_cond_dim", 0)),
     ).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval() # switch off any train-mode layer behaviour before measuring

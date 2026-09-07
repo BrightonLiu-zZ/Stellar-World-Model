@@ -1,0 +1,70 @@
+[OK] ricker2015 | arXiv:1406.0151 | 2014-06-01
+     title:   The Transiting Exoplanet Survey Satellite
+     authors: George R. Ricker, Joshua N. Winn, Roland Vanderspek, +55 more
+[OK] audenaert2021 | arXiv:2107.06301 | 2021-07-13
+     title:   TESS Data for Asteroseismology (T'DA) Stellar Variability Classification Pipeline: Set-Up and Application to the Kepler Q9 Data
+     authors: Jeroen Audenaert, James S. Kuszlewicz, Rasmus Handberg, +16 more
+[OK] prsa2022 | arXiv:2110.13382 | 2021-10-26
+     title:   TESS Eclipsing Binary Stars. I. Short cadence observations of 4584 eclipsing binaries in Sectors 1-26
+     authors: Andrej Prsa, Angela Kochoska, Kyle E. Conroy, +44 more
+[OK] gao2025 | arXiv:2412.06175 | 2024-12-09
+     title:   Classification of Periodic Variable Stars from TESS
+     authors: Xinyi Gao, Xiaodian Chen, Shu Wang, +1 more
+[OK] hon2021 | arXiv:2108.01241 | 2021-08-03
+     title:   A 'Quick Look' at All-Sky Galactic Archeology with TESS: 158,000 Oscillating Red Giants from the MIT Quick-Look Pipeline
+     authors: Marc Hon, Daniel Huber, James S. Kuszlewicz, +6 more
+[OK] hatt2023 | arXiv:2210.09109 | 2022-10-17
+     title:   A Catalogue of Solar-Like Oscillators Observed by TESS in 120-second and 20-second Cadence
+     authors: Emily Hatt, Martin B. Nielsen, William J. Chaplin, +12 more
+[OK] boyle2026 | arXiv:2603.05586 | 2026-03-05
+     title:   The TESS All-Sky Rotation Survey: Periods for 1,046,317 Stars Within 500 pc
+     authors: Andrew W. Boyle, Luke G. Bouma, Andrew W. Mann
+[OK] seli2025 | arXiv:2412.12989 | 2024-12-17
+     title:   Stellar flare morphology with TESS across the main sequence
+     authors: Bálint Seli, Krisztián Vida, Katalin Oláh, +5 more
+[OK] vida2021 | arXiv:2105.11485 | 2021-05-24
+     title:   Finding flares in Kepler and TESS data with recurrent deep neural networks
+     authors: Krisztián Vida, Attila Bódi, Tamás Szklenár, +1 more
+[OK] zuo2025falco | arXiv:2504.20290 | 2025-04-28
+     title:   FALCO: a Foundation model of Astronomical Light Curves for time dOmain astronomy
+     authors: Xiaoxiong Zuo, Yihan Tao, Yang Huang, +13 more
+[OK] donoso2025astromer2 | arXiv:2502.02717 | 2025-02-04
+     title:   Astromer 2
+     authors: Cristobal Donoso-Oliva, Ignacio Becker, Pavlos Protopapas, +3 more
+[OK] li2025staremb | arXiv:2510.06200 | 2025-10-07
+     title:   StarEmbed: Benchmarking Time Series Foundation Models on Astronomical Observations of Variable Stars
+     authors: Weijian Li, Hong-Yu Chen, Nabeel Rehemtulla, +6 more
+[OK] rui2026jepa | arXiv:2606.28446 | 2026-06-26
+     title:   Domain-Informed Multi-View Self-Distillation for Astronomical Light-Curve Representation Learning with JEPA
+     authors: Yicheng Rui
+[OK] poznanski2026 | arXiv:2605.05324 | 2026-05-06
+     title:   A useful representation of TESS light curves
+     authors: Dovi Poznanski
+[OK] makinen2024 | arXiv:2410.07548 | 2024-10-10
+     title:   Hybrid Summary Statistics
+     authors: T. Lucas Makinen, Ce Sui, Benjamin D. Wandelt, +2 more
+[OK] ivezic2019 | arXiv:0805.2366 | 2008-05-15
+     title:   LSST: from Science Drivers to Reference Design and Anticipated Data Products
+     authors: Željko Ivezić, Steven M. Kahn, J. Anthony Tyson, +310 more
+[OK] kingma2014 | arXiv:1312.6114 | 2013-12-20
+     title:   Auto-Encoding Variational Bayes
+     authors: Diederik P Kingma, Max Welling
+[OK] cho2014 | arXiv:1406.1078 | 2014-06-03
+     title:   Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation
+     authors: Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, +4 more
+[OK] sreenivas2026 | arXiv:2604.00498 | 2026-04-01
+     title:   Global asteroseismology of 19,000 red giants in the TESS Continuous Viewing Zones
+     authors: K. R. Sreenivas, Timothy R. Bedding, Daniel Huber, +5 more
+[OK] guerrero2021 | arXiv:2103.12538 | 2021-03-23
+     title:   The TESS Objects of Interest Catalog from the TESS Prime Mission
+     authors: Natalia M. Guerrero, S. Seager, Chelsea X. Huang, +102 more
+
+=== provenance of the two ids found by search, not by id lookup ===
+--- sreenivas_rgb_heb
+    2402.07380v1 | Courtney L. Crawford | 2024-02-12 | The highest mass Kepler red giants -- I. Global asteroseismic parameters of 48 stars
+    2604.00498v2 | K. R. Sreenivas | 2026-04-01 | Global asteroseismology of 19,000 red giants in the TESS Continuous Viewing Zones
+    2604.01847v1 | Yingxiang Wang | 2026-04-02 | Asteroseismic Diagnostics for Red Giants with Kepler: Measuring epsilon and Small Frequency Separations in 16,000 Stars
+    2502.01899v1 | K. R. Sreenivas | 2025-02-04 | Testing the wavelength dependence of oscillations and granulation in red giants using Kepler and TESS
+--- guerrero_toi
+    2103.12538v2 | Natalia M. Guerrero | 2021-03-23 | The TESS Objects of Interest Catalog from the TESS Prime Mission
+    2002.00691v2 | Steven Giacalone | 2020-02-03 | Vetting of 384 TESS Objects of Interest with TRICERATOPS and Statistical Validation of 12 Planet Candidates

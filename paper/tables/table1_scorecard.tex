@@ -1,0 +1,18 @@
+\begin{tabular}{llrrrrrr}
+\toprule
+ & & & \multicolumn{3}{c}{frozen linear readout} & \multicolumn{2}{c}{end-to-end supervised} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-8}
+task & metric & $n$ (prev.) & features & $\mu$ & features\,$\oplus$\,$\mu$ & Conv1D & MLP \\
+\midrule
+pulsating & PR-AUC & 2021 (0.107) & 0.789 & 0.806 & \textbf{0.846} & 0.816 & 0.756 \\
+eclipsing binary & PR-AUC & 2021 (0.097) & 0.742 & 0.771 & \textit{0.775} & 0.774 & 0.720 \\
+rotation & PR-AUC & 2021 (0.089) & 0.540 & 0.559 & 0.555 & \textit{0.571} & 0.535 \\
+transit & PR-AUC & 2021 (0.060) & 0.190 & 0.144 & \textbf{0.218} & 0.133 & 0.108 \\
+oscillating giant & PR-AUC & 3429 (0.383) & \textbf{0.920} & 0.854 & 0.918 & 0.873 & 0.885 \\
+solar-like osc. & PR-AUC & 3429 (0.122) & 0.320 & 0.336 & 0.390 & \textit{0.395} & 0.278 \\
+RGB vs. HeB & ROC-AUC & 161 (0.702) & 0.758 & 0.660 & 0.708 & 0.522 & \textit{0.761} \\
+$\nu_{\max}$ & $R^2$ & 1313 & 0.831 & 0.802 & \textbf{0.867} & 0.841 & 0.834 \\
+rotation period & $R^2$ & 150 & 0.703 & 0.677 & \textbf{0.717} & 0.625 & 0.700 \\
+flare activity & PR-AUC & 3429 (0.089) & 0.474 & 0.453 & 0.524 & \textit{0.528} & 0.450 \\
+\bottomrule
+\end{tabular}

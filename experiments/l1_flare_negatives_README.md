@@ -156,6 +156,29 @@ own D21 condition.** Consequently:
 Recorded honestly: the measurement itself does not read as a null at full power. (B) is a reporting
 policy applied on top of it, and the numbers above are what a reader is owed beside it.
 
+## Visual pass — DONE 2026-09-04, verdict: labels credible. L1 CLOSED.
+
+`src/notebooks/l1_flare_visual_pass.ipynb`, code cell `e9e34e24`. Five populations, three stars each,
+fresh unseeded draw per re-run: positives with/without an on-screen flare, negatives searched-and-clean
+/ never-searched, and the model's top-40 ranked label-negatives.
+
+**User inspected every row and accepted the new labels as credible.** Under the pre-registered rule
+that is *"null confirmed visually"*, so **both D21 defenses now exist** and the flare row is printable.
+L1 is closed.
+
+Two things the figure showed that the numbers did not:
+
+1. **The reconstruction is visibly doing what it claims.** `never-searched` panels are near-pure noise;
+   `searched-and-clean` panels carry obvious astrophysical structure. That contrast was not designed as
+   a control and is the most direct evidence that `σ_ratio` selects on what Seli Eq. (1) says it does.
+2. **The model's top-ranked label-negatives are active rotators, not flare stars.** Strong smooth
+   rotational modulation, no flare morphology. This does not contradict the refutation above — swapping
+   the negative class did not move the delta *because* searched-and-clean negatives are also variable —
+   but it does bound the claim: the audit ruled out one mechanism, it did not establish that the probe
+   responds to flare morphology. Consistent with this ADR's Level B result (training *hurts* window
+   localization). **Do not claim the probe detects flares.** The defensible reading is stellar activity
+   / flare propensity, which is what a star-level `flare_ever` label measures anyway.
+
 ## Estimator notes that bind
 
 - Prevalence changes by design across cells, so paired deltas keep their **sign, not their magnitude**

@@ -163,12 +163,18 @@ arms:
     trunk: conv               # swm.models.encoder.Encoder's conv stack, verbatim
     enc_channels: [32, 64, 128, 256]
     kernel_size: 5
-    seeds: [0, 1, 2]          # D20: 3 seeds, the venue norm (ml4ps-writeup-tips T10)
+    # D20 fixed 3 seeds, the venue norm (ml4ps-writeup-tips T10). EXTENDED to 6 on 2026-09-07 at Yue
+    # Ma's call (WeChat: make it an apple-to-apple comparison, or it will certainly be asked): the mu arms carry six
+    # PRE-TRAINING seeds, so a reviewer reading a 6-vs-3 table asks why. Equal n does NOT make the two
+    # seed kinds the same object -- D-C1.7's unpaired, in-quadrature SE still stands (see also README
+    # "Honest reporting" 2) -- it only removes the count asymmetry from the picture. Seeds 3/4/5 are
+    # appended; 0/1/2 are the already-run runs and are NOT re-run (DONE.txt markers).
+    seeds: [0, 1, 2, 3, 4, 5]
   mlp_raw:
     roadmap_row: C2
     trunk: dense              # Linear(256,256)-ReLU-Linear(256,128)-ReLU, then the same fc_mu/head
     hidden: [256, 256]
-    seeds: [0, 1, 2]
+    seeds: [0, 1, 2, 3, 4, 5]
 
 # --------------------------------------------------------------------------------------------- tasks
 # The 11 rows of the D18 scorecard: the 4 v1 variability tasks + the 7 ADR-0010 probes.
@@ -284,7 +290,8 @@ floors:
   r2: 0.0
 
 # ------------------------------------------------------------------------------------------- queue
-# 2 arms x 11 tasks x 3 seeds = 66 runs. Task order is the priority order: a -MaxHours cutoff leaves
+# 2 arms x 11 tasks x 6 seeds = 132 runs (66 of them already carry DONE.txt from the 3-seed wave and
+# are skipped). Task order is the priority order: a -MaxHours cutoff leaves
 # the LEADING tasks complete. eb first because it is the footing task and its pilot gate is the one
 # with a published number to hit.
 queue:
@@ -309,7 +316,8 @@ pilot_gate:
 # ------------------------------------------------------------------------------------------ budget
 budget:
   pilot_minutes: 12.5          # MEASURED 2026-08-28: 11 conv runs, seed 0, 12.46 min wall on the 4060
-  full_hours: 1.0              # 66 runs; conv 33 at ~3x the pilot, dense arm cheaper per step
+  full_hours: 1.5              # 132 runs. MEASURED 2026-08-29: the first 66 took 45.0 min wall
+                               # (mean 0.68 min/run), so seeds 3-5 add ~45 min on the same hardware.
   note: "The handoff's '~2 GPU nights' was out by two orders of magnitude, and my own pre-pilot
          extrapolation was out by 4x in the same direction. Cause of both: early stopping fires at
          epochs 15-31, not at the 60-epoch cap, so a run is 20-30 epochs rather than 60. Per-run

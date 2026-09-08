@@ -1,7 +1,7 @@
-# C1 + C2 — the two supervised arms of the ML4PS scorecard (2026-08-28/29)
+# C1 + C2 — the two supervised arms of the ML4PS scorecard (2026-08-28/29, extended to 6 seeds 2026-09-07)
 
-`swm.train.supervised` (66 runs) → `experiments/c1c2_supervised/c1c2_{probe,absolute,summary}.csv`
-(66 / 22 / 66 rows), scored by `experiments/analyze_c1c2_supervised.py`. Manifest:
+`swm.train.supervised` (132 runs) → `experiments/c1c2_supervised/c1c2_{probe,absolute,summary}.csv`
+(132 / 22 / 66 rows), scored by `experiments/analyze_c1c2_supervised.py`. Manifest:
 `experiments/configs/c1c2_supervised_baselines.yaml`. Roadmap rows **C1** (D20, provenance Yue Ma
 **W6** merged with the Y13c supervised ceiling) and **C2** (**Y13b**), arms 4 and 6 of the D18
 scorecard.
@@ -56,46 +56,62 @@ Seed-0 wave, all 11 tasks, `conv_supervised`. **PASS on all four automated claus
 strictly above its metric-native floor · `eb` 0.778 ≥ 0.742 (F1's features-linear) · `numax_hon`
 R² 0.843 ≥ 0 · no non-`small_n` run selecting at epoch 0 or the cap.
 
-## Results — 3 seeds, readout `mean`, all arms named (rule 5)
+## Results — 6 seeds, readout `mean`, all arms named (rule 5)
 
 `features` / `µ` / `fusion` are F1's linear arms on `hann0p3_fbwd`; C1/C2 are end-to-end supervised.
+**Seeds 3–5 were added 2026-09-07** at Yue Ma's call (apple-to-apple with the six pre-training seeds of
+the µ arms). Nothing else changed; the 3-seed columns are kept beside the 6-seed ones so the move is
+auditable, and the full before/after record is
+`tmp/handoff/2026-09-07-c1c2-six-seeds-results.md`.
 
-| task | floor | features | µ | fusion | **C1 conv** | **C2 mlp** | fusion − C1 |
-|---|---|---|---|---|---|---|---|
-| eb | 0.097 | 0.742 | 0.771 | 0.775 | 0.774 ±0.005 | 0.720 ±0.011 | 0.000 |
-| pulsating | 0.107 | 0.789 | 0.806 | **0.846** | 0.816 ±0.023 | 0.756 ±0.010 | +0.030 |
-| rotation | 0.089 | 0.540 | 0.559 | 0.555 | 0.571 ±0.006 | 0.535 ±0.006 | −0.015 |
-| transit | 0.060 | 0.190 | 0.144 | **0.218** | 0.133 ±0.023 | 0.108 ±0.007 | +0.085 |
-| ijspeert | 0.046 | 0.508 | 0.440 | 0.454 | 0.457 ±0.003 | 0.456 ±0.005 | −0.002 |
-| rotation_period (R²) | 0.0 | 0.703 | 0.677 | **0.717** | 0.625 ±0.022 | 0.700 ±0.017 | +0.092 |
-| osc_giant | 0.383 | 0.920 | 0.854 | 0.918 | 0.873 ±0.007 | 0.885 ±0.003 | +0.045 |
-| solar_like_osc | 0.122 | 0.320 | 0.336 | 0.390 | 0.395 ±0.003 | 0.278 ±0.008 | −0.005 |
-| flare | 0.089 | 0.474 | 0.453 | 0.524 | 0.528 ±0.007 | 0.450 ±0.012 | −0.004 |
-| numax_hon (R²) | 0.0 | 0.831 | 0.802 | **0.867** | 0.841 ±0.003 | 0.834 ±0.002 | +0.026 |
-| rgb_vs_heb (ROC) | 0.5 | 0.758 | 0.660 | 0.708 | 0.522 ±0.003 | **0.761** ±0.006 | +0.185 |
+| task | floor | features | µ | fusion | **C1 conv** | **C2 mlp** | fusion − C1 | C1 at 3 seeds |
+|---|---|---|---|---|---|---|---|---|
+| eb | 0.097 | 0.742 | 0.771 | 0.775 | 0.774 ±0.003 | 0.719 ±0.007 | +0.001 | 0.774 ±0.005 |
+| pulsating | 0.107 | 0.789 | 0.806 | **0.846** | 0.816 ±0.010 | 0.748 ±0.010 | +0.030 | 0.816 ±0.023 |
+| rotation | 0.089 | 0.540 | 0.559 | 0.555 | 0.565 ±0.006 | 0.526 ±0.018 | −0.010 | 0.571 ±0.006 |
+| transit | 0.060 | 0.190 | 0.144 | **0.218** | 0.134 ±0.012 | 0.109 ±0.004 | +0.084 | 0.133 ±0.023 |
+| ijspeert | 0.046 | 0.508 | 0.440 | 0.454 | 0.456 ±0.006 | 0.454 ±0.005 | −0.001 | 0.457 ±0.003 |
+| rotation_period (R²) | 0.0 | 0.703 | 0.677 | **0.717** | 0.597 ±0.039 | 0.698 ±0.010 | +0.120 | 0.625 ±0.022 |
+| osc_giant | 0.383 | 0.920 | 0.854 | 0.918 | 0.875 ±0.006 | 0.883 ±0.003 | +0.043 | 0.873 ±0.007 |
+| solar_like_osc | 0.122 | 0.320 | 0.336 | 0.390 | 0.396 ±0.004 | 0.275 ±0.006 | −0.006 | 0.395 ±0.003 |
+| flare | 0.089 | 0.474 | 0.453 | 0.524 | 0.533 ±0.010 | 0.444 ±0.008 | −0.009 | 0.528 ±0.007 |
+| numax_hon (R²) | 0.0 | 0.831 | 0.802 | **0.867** | 0.832 ±0.011 | 0.834 ±0.006 | +0.035 | 0.841 ±0.003 |
+| rgb_vs_heb (ROC) | 0.5 | 0.758 | 0.660 | 0.708 | 0.530 ±0.015 | **0.762** ±0.003 | +0.177 | 0.522 ±0.003 |
 
 Detection metric is PR-AUC; every delta's prevalence rides on the CSV rows (R8-F1). Error bars are
-2·SE over 3 seeds; seed sd is **0.002–0.023**, so the arms are well separated relative to their noise.
+2·SE over 6 seeds; seed sd is **0.003–0.048**.
+
+**The bands did not simply shrink by √2.** Seed sd *grew* on 15 of 22 (arm, task) rows and the 2·SE band
+widened on 10 of them — the three new seeds are more dispersed than the first three. `numax_hon` (C1)
+went ±0.003 → ±0.011 and `rgb_vs_heb` (C1) ±0.004 → ±0.015. **The 3-seed error bars were optimistic on
+those rows**, which is the substantive result of the extension: the seed count was not only an
+appearance problem.
 
 ### Verdict 1 — the supervised arm never beats the fusion probe
 
 Counting at 2·SE, **unpaired** (a supervised seed is an init/shuffle seed; an encoder seed is a
 pretraining seed — pairing them by index would manufacture a correlation that does not exist):
 
-| against | F1 arm ahead | C1 ahead | tied |
-|---|---|---|---|
-| `features` linear | 5 / 11 | 6 / 11 | 0 |
-| `µ` linear | 2 / 11 | **4 / 11** | 5 |
-| **`features ⊕ µ` linear** | **6 / 11** | **0 / 11** | 5 |
+| against | F1 arm ahead | C1 ahead | tied | (3-seed) |
+|---|---|---|---|---|
+| `features` linear | 5 / 11 | 5 / 11 | 1 | 5 / 6 / 0 |
+| `µ` linear | 2 / 11 | **4 / 11** | 5 | unchanged |
+| **`features ⊕ µ` linear** | **6 / 11** | **0 / 11** | 5 | unchanged |
 
-C1 clears the engineered-feature baseline on 6 of 11 and the µ-only probe on 4, so it is not a
+C1 clears the engineered-feature baseline on 5 of 11 and the µ-only probe on 4, so it is not a
 strawman — but it does not exceed the fusion readout on a single task.
+
+**Only one cell moved between 3 and 6 seeds: `numax_hon` against `features`.** C1 was ahead by 0.0097
+against a band of 0.0027 and is now ahead by 0.0011 against 0.0112 — a tie. Its R² fell 0.841 → 0.832
+because seed 5 selected at epoch 4 and scores 0.807. **Every verdict against the fusion arm is
+unchanged**, including the three rows the pre-run simulation flagged as within one seed-sd of flipping
+(`rotation`, `solar_like_osc`, `flare` — all still tied; `rotation` moved *away* from a flip).
 
 ### Verdict 2 — what that does and does not license
 
 **Does:** on 5 of 11 tasks a supervised Conv1D of the same architecture, trained end-to-end on the
 same labels and the same input, reaches the frozen fusion readout and no further; on the other 6 it
-falls short of it. `recovery fraction` (probe − floor)/(C1 − floor) sits at **0.97–1.09** on eight
+falls short of it. `recovery fraction` (probe − floor)/(C1 − floor) sits at **0.98–1.09** on eight
 tasks — the labelled ceiling and the label-free readout are in the same place.
 
 **Does not:** this is *not* "SSL matches supervision". The supervised arm has 669–16,002 labelled
@@ -105,17 +121,22 @@ model with an order of magnitude more labels is not bounded by this measurement.
 
 ### Verdict 3 — the convolution earns its keep, except where n is small
 
-`C1 − C2`, the controlled architecture contrast: conv ahead on **8 of 11**, dense ahead on 3.
+`C1 − C2`, the controlled architecture contrast: on point estimates conv is ahead on **7 of 11**, dense
+on 4 (3 seeds: 8 and 3). Judged at 2·SE: **conv 6, dense 3, tied 2** (3 seeds: 7 / 3 / 1).
 
 | dense wins | C1 conv | C2 mlp | n_train |
 |---|---|---|---|
-| rgb_vs_heb | 0.522 | **0.761** | 755 |
-| rotation_period (R²) | 0.625 | **0.700** | 669 |
-| osc_giant | 0.873 | **0.885** | 16,002 |
+| rgb_vs_heb | 0.530 | **0.762** | 755 |
+| rotation_period (R²) | 0.597 | **0.698** | 669 |
+| osc_giant | 0.875 | **0.883** | 16,002 |
+| numax_hon (R²) | 0.832 | 0.834 | 6,157 | 
 
 The two reversals with a margin are exactly the two smallest training sets, and the dense trunk is
 **132 k parameters against the conv trunk's 1.1 M** — a capacity story, not an architecture-superiority
-one. `osc_giant` flips by +0.012 at 16,002 stars and is the one that does not fit that reading.
+one. `osc_giant` still flips by +0.008 at 16,002 stars and is the one that does not fit that reading.
+`numax_hon` is the row the extra seeds moved: conv led by +0.007 against a band of 0.004 at 3 seeds and
+now trails by 0.002 against a band of 0.012 — **it was never a resolved architecture difference**, and
+three seeds made it look like one.
 
 ## Honest reporting — everything flagged, nothing dropped
 
@@ -125,13 +146,14 @@ one. `osc_giant` flips by +0.012 at 16,002 stars and is the one that does not fi
    and an all-segment arm would re-open the bag-size confound the K-matched control exists to price.
    **Consequence, stated rather than argued if challenged: this bounds the labelled ceiling at the
    probe's input scope, not in general.** No all-segment arm is run; it is a v2/journal cell.
-2. **One flagged run, reported not re-run.** `conv_supervised / pulsating / seed 2` selected at
-   **epoch 0** and is flagged `selected_first_epoch`. Its score (0.794) sits below its siblings
-   (0.832, 0.823) and is the reason `pulsating` carries the widest conv error bar (±0.023). It was
-   **not** dropped or re-run: removing a seed selected post-hoc on an outcome-correlated criterion is
-   the estimator swap this project's VOID rule forbids. `conv/pulsating` and `conv/transit` both
-   select very early across all seeds (median epoch 2 and 3) — their val metric is near-flat from the
-   first epoch.
+2. **Two flagged runs, reported not re-run.** `conv_supervised / pulsating / seed 2` selected at
+   **epoch 0** (score 0.794, below its siblings) and, added in the 6-seed wave,
+   `conv_supervised / transit / seed 5`, also at **epoch 0** (score 0.125 — not the worst transit seed;
+   seed 2 scores 0.111). Neither was dropped or re-run: removing a seed selected post-hoc on an
+   outcome-correlated criterion is the estimator swap this project's VOID rule forbids, and that rule
+   was restated before the new seeds ran, not after seeing them. `conv/pulsating` and `conv/transit`
+   both select very early across all seeds — their val metric is near-flat from the first epoch. No run
+   selected at the 60-epoch cap.
 3. **Five of eleven tasks overfit after their selected epoch**, so W13's "no overfit" holds **at the
    reported checkpoint** and early stopping is doing real work rather than decorating:
    `rotation_period` val R² 0.581 → −0.147, `transit` −42%, `numax_hon` −40%, `ijspeert` −23%,
@@ -140,7 +162,7 @@ one. `osc_giant` flips by +0.012 at 16,002 stars and is the one that does not fi
 4. **`small_n` cells are reported, never used to support a claim.** `rotation_period` (669 train
    stars) and `rgb_vs_heb` (755) train ~1.1 M parameters on very little; they were flagged in the
    manifest *before* running and were exempt from the pilot gate.
-5. **`rgb_vs_heb`'s recovery fraction is 9.26× and must not be quoted.** C1 stays the designated
+5. **`rgb_vs_heb`'s recovery fraction is 6.84× (9.26× at 3 seeds) and must not be quoted.** C1 stays the designated
    Ceiling B — swapping the denominator to whichever arm won, after seeing which arm won, is the
    post-hoc swap the VOID rule forbids — so the row carries two machine-generated caveats instead:
    `mlp_raw` reaches 0.761 on this task so the ratio understates the ceiling, and the denominator
@@ -153,8 +175,9 @@ one. `osc_giant` flips by +0.012 at 16,002 stars and is the one that does not fi
 
 ## Cost, measured
 
-**45.0 min of GPU for all 66 runs** (mean 0.68 min/run) on the RTX 4060, plus ~13 min of one-off CPU
-to cache the first-segment blocks for both populations. The handoff's "~2 GPU nights" was out by two
+**95.1 min of GPU for all 132 runs** (45.0 min for seeds 0–2, 50.1 min for seeds 3–5; mean 0.72
+min/run) on the RTX 4060, plus ~13 min of one-off CPU to cache the first-segment blocks for both
+populations. The original handoff's "~2 GPU nights" was out by two
 orders of magnitude and the manifest's own pre-pilot estimate by 4×; the cause of both is that early
 stopping fires at epochs 15–31, not at the 60-epoch cap. Quote `mean_minutes` from
 `c1c2_absolute.csv`, never a planning estimate.
@@ -164,3 +187,10 @@ stopping fires at epochs 15–31, not at the 60-epoch cap. Quote `mean_minutes` 
 **R5'** (the 11×7 figure) gets arms 4 and 6, with absolutes, unpaired 2·SE deltas against all three
 F1 linear arms, and the recovery fraction. **R4'** must carry Verdict 2's wording: the sentence is
 "SSL matches what this architecture reaches on the labels that exist", never "matches supervision".
+
+**ML4PS draft.** The paper's headline count against C1 (**ahead 6 / indistinguishable 4 / behind 0** on
+the 10-task menu) is **unchanged** at six seeds. Three of its sentences still move: §2's seed count
+("three, fixed before any run") and the clause defending the asymmetry, §3's "clears the engineered arm
+on 6 of 10" (→ 5, `numax_hon`), and — if the C2 flip is accepted — "ahead on 8 of 10" against C2 (→ 9,
+`rotation_period`, a `small_n` row). Sentence-by-sentence with line numbers:
+`tmp/handoff/2026-09-07-c1c2-six-seeds-results.md`. `main.tex` is not edited by this wave.

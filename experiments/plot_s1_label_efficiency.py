@@ -142,6 +142,54 @@ def arm_panel(summary: pd.DataFrame, out_path: Path) -> None:
     log.info(f"wrote {out_path}")
 
 
+def control_panel(fixed: pd.DataFrame, cv: pd.DataFrame, out_path: Path) -> None:
+    """The readout control: the same fusion delta under a fixed and an n-adapting penalty.
+
+    Only budgets scored under BOTH readouts are drawn. The control ran the fraction points of the
+    ladder and not the absolute infill, so plotting each curve over its own budget set would put the
+    two lines at different x and invite reading a budget difference as a readout difference.
+    """
+    fusion = lambda frame: frame[(frame["arm_set"] == "features_plus_mu")
+                                 & (frame["family"] == CELL_NAME)]
+    a, b = fusion(fixed), fusion(cv)
+    tasks = []
+    for task in TASK_ORDER:
+        if not b[b["task"] == task].empty:
+            tasks.append(task)
+    ncol = 3
+    nrow = int(np.ceil(len(tasks) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4 * ncol, 3 * nrow), squeeze=False)
+    for position, task in enumerate(tasks):
+        ax = axes[position // ncol][position % ncol]
+        left = a[a["task"] == task].set_index("n_target")
+        right = b[b["task"] == task].set_index("n_target")
+        shared = sorted(set(left.index) & set(right.index))
+        ax.errorbar(shared, left.loc[shared, "delta_mean"], yerr=left.loc[shared, "seed_2se"],
+                    marker="o", markersize=3, capsize=2, color="#d62728",
+                    label="fixed C = 1.0 (frozen readout)")
+        ax.errorbar(shared, right.loc[shared, "delta_mean"], yerr=right.loc[shared, "seed_2se"],
+                    marker="s", markersize=3, capsize=2, color="#2ca02c", linestyle="--",
+                    label="C chosen by CV (control)")
+        ax.axhline(0, color="black", linewidth=1)
+        ax.set_xscale("log")
+        ax.set_title(task, fontsize=10)
+        ax.set_xlabel("labelled training stars")
+        if task in UNPRINTABLE:
+            ax.set_facecolor("#f0f0f0")
+    for position in range(len(tasks), nrow * ncol):
+        axes[position // ncol][position % ncol].axis("off")
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    # a 3x3 grid of 9 tasks leaves no empty axes, so the legend goes in the header strip rather than
+    # on top of the last panel's x label
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.955), ncol=2, fontsize=9)
+    fig.suptitle("S1 readout control -- fusion delta under a fixed vs an n-adapting penalty\n"
+                 "matched budgets only; grey panel = unprintable", y=1.0)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+    log.info(f"wrote {out_path}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="S1 label-efficiency figures.")
     ap.add_argument("--in-dir", default="experiments/s1_label_efficiency")
@@ -151,6 +199,11 @@ def main() -> int:
     growth = pd.read_csv(home / "s1_growth.csv")
     delta_panel(summary, growth, home / "s1_delta_curves.png")
     arm_panel(summary, home / "s1_arm_curves.png")
+    control = home / "control_cvC" / "s1_summary.csv"
+    if control.exists():
+        control_panel(summary, pd.read_csv(control), home / "s1_readout_control.png")
+    else:
+        log.warning("control_cvC/s1_summary.csv absent; readout-control panel skipped")
     return 0
 
 

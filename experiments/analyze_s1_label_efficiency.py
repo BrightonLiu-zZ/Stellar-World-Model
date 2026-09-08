@@ -44,6 +44,21 @@ ARMS (5), one readout (`mean`), one readout family (`linear`) -- the F1 headline
 The dyn-off arm is deliberately absent: `delta(fbwd) - delta(off)` is a second story and would double
 the runtime of a one-panel figure.
 
+THE `cvC` CONTROL (added 2026-09-01, AFTER the fixedC curves were read -- said plainly rather than
+back-dated). The fixedC result splits 9-2 along the readout, not along the task: all nine
+classification probes use `LogisticRegression(C=1.0)`, whose penalty strength does NOT depend on n,
+and all nine lose their fusion advantage at small budgets; both regression probes use `RidgeCV`, whose
+alpha IS chosen by leave-one-out CV at every budget, and both keep a positive delta down to 50 and 67
+training stars. So "the fusion advantage is a large-label phenomenon" has an alternative reading --
+"a readout with n-independent regularisation overfits 153 columns on few rows" -- and the two are not
+separable in the fixedC table. `--readout cvC` swaps ONE knob (C chosen by cross-validation, sklearn's
+default `Cs=10` grid, everything else held identical) and re-runs the nine classification probes.
+    control confirms  collapse survives an adapting penalty --> the negative is about LABELS.
+    control refutes   collapse disappears --> the fixedC curve measured a hyperparameter, and S1's
+                      headline is that finding, not the label-efficiency one.
+Reported BESIDE the frozen headline and never replacing it (the C3b precedent); the linear-probe lock
+in CLAUDE.md governs the headline probe, which this does not touch.
+
 POPULATION. S1 inherits F1's populations unchanged -- the v1 packed subset (9,428 / 2,021 stars) and
 the new-task pool (16,002 / 3,429). Both are CASE-CONTROL, so every prevalence here is inflated
 relative to a survey; R8 measured absolutes falling 60-71 % under `survey_matched`. Deltas keep their
@@ -92,7 +107,10 @@ for _blas_var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
 from tqdm.auto import tqdm
 
 repo_root = Path(__file__).resolve().parents[1]
@@ -132,6 +150,10 @@ POPULATION_NOTE = ("F1 scorecard population, CASE-CONTROL: prevalence is inflate
                    "No absolute score here transfers to a survey population.")
 # flare rides F1's flare_ever labels and is unprintable until L1's visual gate lands (STATUS 2026-08-26d).
 UNPRINTABLE = {"flare"}
+# Readouts. `fixedC` is the frozen protocol and the ONLY headline: LogisticRegression(C=1.0) for
+# labels, RidgeCV for targets, exactly what F1 fitted. `cvC` is the APPENDIX CONTROL added
+# 2026-09-01 after the fixedC curves came back -- see the CONTROL block in the module docstring.
+READOUTS = ("fixedC", "cvC")
 
 
 # ------------------------------------------------------------------------------------- task registry
@@ -280,28 +302,65 @@ def stratified_draw(strata: np.ndarray, n_target: int, draw: int) -> np.ndarray:
 
 
 # ------------------------------------------------------------------------------------------ scoring
+def logistic_cv_scores(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray,
+                       shape: str) -> np.ndarray:
+    """The `cvC` control readout: the same balanced logistic probe with C chosen by cross-validation.
+
+    Everything except the penalty strength is held identical to `fit_readout_scores("logistic", ...)`
+    -- same standardisation fitted on train only, same `class_weight="balanced"`, same solver budget --
+    so the difference between the two readouts is the ONE knob this control is about.
+
+    `Cs=10` is sklearn's own default grid, not a grid chosen by us: a hand-picked range would let this
+    control be read as tuning rather than as a check. The fold count is capped by the rarer class,
+    because at 50 training stars a 5-fold split of 10 positives leaves folds with two, and a CV that
+    cannot estimate its own objective would be a worse readout than the one it is auditing -- which
+    would confound the control in the direction that flatters the pre-registered result.
+    """
+    scaler = StandardScaler()
+    x_tr = scaler.fit_transform(x_train)  # learn mean/std on train only (no leakage)
+    x_te = scaler.transform(x_test)
+    minority = int(min((y_train == 0).sum(), (y_train == 1).sum()))
+    folds = max(2, min(5, minority))
+    scoring = "roc_auc" if shape == "contrastive" else "average_precision"
+    clf = LogisticRegressionCV(Cs=10, cv=StratifiedKFold(folds, shuffle=True, random_state=0),
+                               class_weight="balanced", scoring=scoring, max_iter=2000, n_jobs=1)
+    clf.fit(x_tr, y_train)
+    return clf.predict_proba(x_te)[:, 1]
+
+
 def score_cell(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_test: np.ndarray,
-               shape: str) -> float:
-    """One (arm, budget, draw) fit under the F1 headline readout: logistic for labels, RidgeCV for targets."""
+               shape: str, readout: str = "fixedC") -> float:
+    """One (arm, budget, draw) fit. `fixedC` is F1's frozen readout; `cvC` is the appendix control.
+
+    The regression path is IDENTICAL under both readouts and that is the point of the control: RidgeCV
+    already selects its penalty by leave-one-out CV, so the two regression probes are the only cells in
+    the fixedC table whose readout adapts to n -- and they are exactly the two that did not collapse.
+    Re-running them here would produce two duplicate columns, so they are scored once and the CSV says
+    the readout axis does not apply to them.
+    """
     if shape == "regression":
         metrics, _ = score_regression(x_train, y_train, x_test, y_test, "ridge", 0)
         return float(metrics["r2"])
-    scores = fit_readout_scores("logistic", x_train, y_train, x_test, 0)
+    if readout == "cvC":
+        scores = logistic_cv_scores(x_train, y_train, x_test, shape)
+    else:
+        scores = fit_readout_scores("logistic", x_train, y_train, x_test, 0)
     if shape == "contrastive":
         return float(roc_auc_score(y_test, scores))
     return float(average_precision_score(y_test, scores))
 
 
 def run_cell(task: str, shape: str, metric: str, level: dict, draw: int, index: np.ndarray,
-             arm_set: str, family: str, seed: int, x_train, y_train, x_test, y_test) -> dict:
+             arm_set: str, family: str, seed: int, x_train, y_train, x_test, y_test,
+             readout: str) -> dict:
     """One (task, budget, draw, arm) cell, at module level so joblib can ship it to a worker."""
-    score = score_cell(x_train[index], y_train[index], x_test, y_test, shape)
+    score = score_cell(x_train[index], y_train[index], x_test, y_test, shape, readout)
     if level["is_full"]:
         draw_kind = "full budget: nothing to resample and the readout is deterministic"
     else:
         draw_kind = "stratified train resample"
-    return {"task": task, "shape": shape, "metric": metric, "arm_set": arm_set, "family": family,
-            "seed": seed, "n_target": level["n_target"], "frac": level["frac"],
+    return {"task": task, "shape": shape, "metric": metric, "readout": readout, "arm_set": arm_set,
+            "family": family, "seed": seed, "n_target": level["n_target"], "frac": level["frac"],
             "provenance": level["provenance"], "is_full": level["is_full"], "draw": draw,
             "n_train": int(len(index)),
             "n_train_pos": int(y_train[index].sum()) if shape != "regression" else -1,
@@ -323,8 +382,9 @@ def arm_matrices(task_spec: dict, tables: dict[str, dict[str, dict]]) -> dict[tu
     return out
 
 
-def task_rows(task: str, spec: dict, tables: dict, draws: int,
-              jobs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def task_rows(task: str, spec: dict, tables: dict, draws: int, jobs: int, readout: str = "fixedC",
+              arm_sets: tuple[str, ...] | None = None,
+              fractions_only: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Every admissible (budget, draw, arm) cell for one task, plus the budgets the floor rejected."""
     strata = strata_for(spec)
     matrices = arm_matrices(spec, tables)
@@ -334,6 +394,8 @@ def task_rows(task: str, spec: dict, tables: dict, draws: int,
         if not level["admissible"]:
             skipped.append({"task": task, **level, "population": spec["population"]})
             continue
+        if fractions_only and "x" not in level["provenance"]:
+            continue  # the control runs the roadmap's own fraction points, not the absolute infill
         n_draws = 1 if level["is_full"] else draws
         for draw in range(n_draws):
             if level["is_full"]:
@@ -341,9 +403,11 @@ def task_rows(task: str, spec: dict, tables: dict, draws: int,
             else:
                 index = stratified_draw(strata, level["n_target"], draw)
             for (arm_set, family, seed), (x_train, x_test) in matrices.items():
+                if arm_sets is not None and arm_set not in arm_sets:
+                    continue
                 payload.append(delayed(run_cell)(task, spec["shape"], spec["metric"], level, draw,
                                                  index, arm_set, family, seed, x_train, y_train,
-                                                 x_test, y_test))
+                                                 x_test, y_test, readout))
     results = Parallel(n_jobs=jobs)(tqdm(payload, desc=f"cells[{task}]", total=len(payload)))
     frame = pd.DataFrame(results)
     frame["population"] = spec["population"]
@@ -583,6 +647,13 @@ def main() -> int:
     ap.add_argument("--draws", type=int, default=10, help="stratified train resamples per budget")
     ap.add_argument("--jobs", type=int, default=10)
     ap.add_argument("--out-dir", default="experiments/s1_label_efficiency")
+    ap.add_argument("--readout", default="fixedC", choices=list(READOUTS),
+                    help="`fixedC` is the frozen headline; `cvC` is the appendix control (see docstring)")
+    ap.add_argument("--arm-sets", nargs="+", default=None,
+                    choices=["features_only", "mu", "features_plus_mu"],
+                    help="restrict the arm list; the control does not need the mu-only arm")
+    ap.add_argument("--fractions-only", action="store_true",
+                    help="score only the fraction points of the ladder, not the absolute infill")
     ap.add_argument("--force", action="store_true", help="rescore tasks whose shard already exists")
     ap.add_argument("--summary-only", action="store_true",
                     help="rebuild the summary/verdict tables from existing shards (seconds, not minutes)")
@@ -611,7 +682,9 @@ def main() -> int:
             if shard.exists() and not args.force:
                 log.info(f"shard exists, skipping {task} (use --force to rescore)")
                 continue
-            frame, skipped = task_rows(task, specs[task], tables, args.draws, args.jobs)
+            arm_sets = tuple(args.arm_sets) if args.arm_sets else None
+            frame, skipped = task_rows(task, specs[task], tables, args.draws, args.jobs,
+                                       args.readout, arm_sets, args.fractions_only)
             frame.to_csv(shard, index=False)
             skipped.to_csv(skip_shard, index=False)
             log.info(f"{task}: {len(frame)} cells, {len(skipped)} budgets below the floor -> {shard}")
@@ -642,9 +715,15 @@ def main() -> int:
 
     summary = summarize(probe)
     summary.to_csv(out_dir / "s1_summary.csv", index=False)
-    checks = footing_full_budget(summary)
-    if not checks.empty:
-        checks.to_csv(out_dir / "s1_footing.csv", index=False)
+    if args.readout == "fixedC":
+        checks = footing_full_budget(summary)
+        if not checks.empty:
+            checks.to_csv(out_dir / "s1_footing.csv", index=False)
+    else:
+        # F1 published no cvC number, so there is nothing to reproduce. The control's footing is the
+        # fixedC run it is compared against, which carries FOOTING-1/2 already.
+        log.info(f"FOOTING-1 not applicable at readout {args.readout}: F1 published no such cell. "
+                 "This artifact is a CONTROL and inherits its footing from the fixedC run.")
 
     verdict = growth_verdict(probe)
     verdict.to_csv(out_dir / "s1_growth.csv", index=False)

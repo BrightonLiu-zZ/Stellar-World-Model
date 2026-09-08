@@ -41,6 +41,8 @@ cited_ids = {
     # rows and a trailing "unresolved" block that made two settled entries look outstanding.
     "sreenivas2026": "2604.00498",
     "guerrero2021": "2103.12538",
+    # Added 2026-09-07 with Appendix A: the physical discriminant behind the rgb_vs_heb labels.
+    "bedding2011": "1103.5805",
 }
 
 # Kept so the report records HOW the two ids above were found, not because anything is outstanding.

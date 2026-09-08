@@ -58,6 +58,9 @@
 [OK] guerrero2021 | arXiv:2103.12538 | 2021-03-23
      title:   The TESS Objects of Interest Catalog from the TESS Prime Mission
      authors: Natalia M. Guerrero, S. Seager, Chelsea X. Huang, +102 more
+[OK] bedding2011 | arXiv:1103.5805 | 2011-03-30
+     title:   Gravity modes as a way to distinguish between hydrogen- and helium-burning red giant stars
+     authors: Timothy R. Bedding, Benoit Mosser, Daniel Huber, +31 more
 
 === provenance of the two ids found by search, not by id lookup ===
 --- sreenivas_rgb_heb

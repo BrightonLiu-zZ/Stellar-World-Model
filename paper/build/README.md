@@ -12,7 +12,7 @@ picking through it. Everything that is a tool, a provenance record or a screen c
 |---|---|
 | `paper/main.tex` | the paper. NeurIPS 2026 template, unmodified `.sty`; the workshop footer is set by a `\renewcommand` in the preamble, not by editing the style file |
 | `paper/neurips_2026.sty` | official template, downloaded 2026-09-04 from `media.neurips.cc/Conferences/NeurIPS2026/Formatting_Instructions_For_NeurIPS_2026.zip`. **Do not edit** — a modified template is a desk reject |
-| `paper/refs.bib` | 20 entries, every one resolved against the arXiv API by id |
+| `paper/refs.bib` | 21 entries, every one resolved against the arXiv API by id |
 | `paper/tables/table1_scorecard.tex` | generated. Do not hand-edit |
 | `paper/figures/fig1_deltas.pdf` | generated. The PDF is what LaTeX embeds |
 | `paper/main.pdf` | the compiled draft, kept for sending to collaborators. Overleaf builds its own |
@@ -52,7 +52,10 @@ pandoc build/main_docx.tex --citeproc --bibliography=refs.bib --resource-path=.:
 
 ## Venue constraints this build satisfies
 
-- 4 pages excluding references: body ends on page 4, references run pages 5-6.
+- 4 pages excluding references: body ends on page 4, references run pages 5-6, Appendix A sits on
+  page 6 after them. The 2026 guidelines say "submissions should not exceed 4 pages", desk-reject on
+  "longer than 4 pages (not including references)", and "appendices are discouraged, and reviewers
+  have no obligation to read them" — so nothing load-bearing may live in the appendix.
 - Footer reads exactly "Submitted to the 9th Workshop on Machine Learning and the Physical Sciences (ML4PS 2026). Do not distribute."
 - Fully anonymized; no code link (optional at this venue for the Research track, verified against the 2026 guidelines page). Replication is served by a text recipe in §4 plus the sizes given there, not by a repository.
 - Generative-AI use disclosed, as the guidelines require.

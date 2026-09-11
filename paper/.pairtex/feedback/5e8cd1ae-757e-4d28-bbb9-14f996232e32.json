@@ -23,8 +23,8 @@
   "created_at": "2026-09-10T17:32:22.127Z",
   "resolution": {
     "resolved_at": "2026-09-11T00:47:22Z",
-    "resolution_commit": null,
-    "note": "Bold conclusion rewritten as two plain sentences. 'on the labels that exist' replaced by the concrete count: 'trained on the same labelled stars, 669 to 16,002 per task'. 'not competing' and 'frozen features' dropped. Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+    "resolution_commit": "479069e",
+    "note": "Bold conclusion rewritten as two plain sentences. 'on the labels that exist' replaced by the concrete count: 'trained on the same labelled stars, 669 to 16,002 per task'. 'not competing' and 'frozen features' dropped. Source change committed as 479069e. Rebuilt PDF: body ends on page 4. HTML projection regenerated."
   },
   "thread": [
     {

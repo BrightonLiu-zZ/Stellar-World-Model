@@ -25,8 +25,8 @@
   "created_at": "2026-09-10T17:38:22.345Z",
   "resolution": {
     "resolved_at": "2026-09-11T00:47:22Z",
-    "resolution_commit": null,
-    "note": "Heading now states the paragraph's conclusion: 'Model selection must be gated on a held-out probe.' Opening sentence de-diarised. 'Encoder architecture is critical' was not adopted because the paragraph never varies the architecture; it varies the selection rule. Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+    "resolution_commit": "479069e",
+    "note": "Heading now states the paragraph's conclusion: 'Model selection must be gated on a held-out probe.' Opening sentence de-diarised. 'Encoder architecture is critical' was not adopted because the paragraph never varies the architecture; it varies the selection rule. Source change committed as 479069e. Rebuilt PDF: body ends on page 4. HTML projection regenerated."
   },
   "thread": [
     {

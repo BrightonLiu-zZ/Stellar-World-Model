@@ -25,8 +25,8 @@
   "created_at": "2026-09-10T17:34:34.220Z",
   "resolution": {
     "resolved_at": "2026-09-11T00:47:22Z",
-    "resolution_commit": null,
-    "note": "The three-line readout sentence is now three short ones: same linear model across the four linear-readout arms (named in brackets); few parameters so it cannot rescue weak features; claim scoped to a linear readout. 'named'/'auditable' removed (they only held for the 25 engineered features, not the 128 latent dimensions). Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+    "resolution_commit": "479069e",
+    "note": "The three-line readout sentence is now three short ones: same linear model across the four linear-readout arms (named in brackets); few parameters so it cannot rescue weak features; claim scoped to a linear readout. 'named'/'auditable' removed (they only held for the 25 engineered features, not the 128 latent dimensions). Source change committed as 479069e. Rebuilt PDF: body ends on page 4. HTML projection regenerated."
   },
   "thread": [
     {

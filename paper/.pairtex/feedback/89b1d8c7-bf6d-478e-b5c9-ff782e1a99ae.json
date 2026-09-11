@@ -23,8 +23,8 @@
   "created_at": "2026-09-10T17:29:56.454Z",
   "resolution": {
     "resolved_at": "2026-09-11T00:47:22Z",
-    "resolution_commit": null,
-    "note": "Abstract sentence split into three (train+freeze / evaluate / baselines). 'star embedding' replaced by 'the features it has learned for each star'; every later 'embedding' of ours is now 'learned features' (the two remaining uses cite other papers' objects). Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+    "resolution_commit": "479069e",
+    "note": "Abstract sentence split into three (train+freeze / evaluate / baselines). 'star embedding' replaced by 'the features it has learned for each star'; every later 'embedding' of ours is now 'learned features' (the two remaining uses cite other papers' objects). Source change committed as 479069e. Rebuilt PDF: body ends on page 4. HTML projection regenerated."
   },
   "thread": [
     {

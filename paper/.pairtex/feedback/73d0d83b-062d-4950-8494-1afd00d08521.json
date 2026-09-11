@@ -25,8 +25,8 @@
   "created_at": "2026-09-10T17:39:56.075Z",
   "resolution": {
     "resolved_at": "2026-09-11T00:47:22Z",
-    "resolution_commit": null,
-    "note": "Paragraph renamed 'Limitations and next steps' and rewritten: every limitation now ends in what we would do next; the self-audit numbers (8.60/17.34-day periods, +0.0506->+0.0507 flare audit) are gone; 'incomplete catalogues' is reframed as 'every detection score is a lower bound'; flare is explained in plain words (a flaring star, not a flare in the segment). 14 lines -> 13 lines, body still ends on page 4. Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+    "resolution_commit": "479069e",
+    "note": "Paragraph renamed 'Limitations and next steps' and rewritten: every limitation now ends in what we would do next; the self-audit numbers (8.60/17.34-day periods, +0.0506->+0.0507 flare audit) are gone; 'incomplete catalogues' is reframed as 'every detection score is a lower bound'; flare is explained in plain words (a flaring star, not a flare in the segment). 14 lines -> 13 lines, body still ends on page 4. Source change committed as 479069e. Rebuilt PDF: body ends on page 4. HTML projection regenerated."
   },
   "thread": [
     {

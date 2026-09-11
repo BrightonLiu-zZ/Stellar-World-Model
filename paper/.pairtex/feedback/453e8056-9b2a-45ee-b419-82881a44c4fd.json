@@ -1,0 +1,40 @@
+{
+  "id": "453e8056-9b2a-45ee-b419-82881a44c4fd",
+  "kind": "comment",
+  "status": "resolved",
+  "decision": null,
+  "head_commit": "fa8ede52cf8d737bb63ca1598b54db26378d6773",
+  "worktree_dirty": true,
+  "author": "Yue Ma",
+  "anchor": {
+    "file_hint": null,
+    "line_start_hint": null,
+    "line_end_hint": null,
+    "section": [
+      "Discussion"
+    ],
+    "selected_rendered_text": "Every comparison here is made under a linear readout, which is a choice rather than a concession: logistic regression over named axes is cheap, auditable, and stable enough that a change in the data appears in the coefficients rather than in the optimiser.",
+    "selected_source_text": "Every comparison here is made under a linear readout, which is a choice rather than a\n       concession: logistic regression over named axes is cheap, auditable, and stable enough\n       that a change in the data appears in the coefficients rather than in the optimiser. We claim\n       complementarity in that setting, not for readouts of arbitrary capacity. Our corpus is the bright\n       (",
+    "rendered_offset": null,
+    "prefix_context": "",
+    "suffix_context": ""
+  },
+  "payload": {
+    "comment": "Again this sentence is too long, too compacted."
+  },
+  "created_at": "2026-09-10T17:34:34.220Z",
+  "resolution": {
+    "resolved_at": "2026-09-11T00:47:22Z",
+    "resolution_commit": null,
+    "note": "The three-line readout sentence is now three short ones: same linear model across the four linear-readout arms (named in brackets); few parameters so it cannot rescue weak features; claim scoped to a linear readout. 'named'/'auditable' removed (they only held for the 25 engineered features, not the 128 latent dimensions). Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+  },
+  "thread": [
+    {
+      "id": "reply-453e8056",
+      "author": "paper-agent",
+      "role": "agent",
+      "body": "The three-line readout sentence is now three short ones: same linear model across the four linear-readout arms (named in brackets); few parameters so it cannot rescue weak features; claim scoped to a linear readout. 'named'/'auditable' removed (they only held for the 25 engineered features, not the 128 latent dimensions).",
+      "created_at": "2026-09-11T00:47:22Z"
+    }
+  ]
+}

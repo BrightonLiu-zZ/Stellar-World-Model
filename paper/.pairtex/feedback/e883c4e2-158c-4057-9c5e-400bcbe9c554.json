@@ -1,0 +1,40 @@
+{
+  "id": "e883c4e2-158c-4057-9c5e-400bcbe9c554",
+  "kind": "comment",
+  "status": "resolved",
+  "decision": null,
+  "head_commit": "fa8ede52cf8d737bb63ca1598b54db26378d6773",
+  "worktree_dirty": true,
+  "author": "Yue Ma",
+  "anchor": {
+    "file_hint": null,
+    "line_start_hint": null,
+    "line_end_hint": null,
+    "section": [
+      "Discussion"
+    ],
+    "selected_rendered_text": "Selecting an encoder is harder than training one. Our largest practical difficulty was not optimisation but model selection. The reconstruction objective develops a localised artifact at the window boundary, and none of eleven interventions across four families of fix satisfied both pre-registered acceptance criteria, so the tapered variant shipped on the stated rule, not because it won. Underlying this is a measurement we think generalises. Across ten pre-training recipes, validation reconstruction anti-predicts downstream probe score: the Spearman Math input error\nMath input error\n between negated validation reconstruction and PR-AUC runs from Math input error\nMath input error\n to Math input error\nMath input error\n over four tasks, the loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs Math input error\nMath input error\n–Math input error\nMath input error\n PR-AUC. The effect lives across recipes, not across seeds of one recipe, where no label-free metric we tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on its own objective and must be gated on a held-out probe.",
+    "selected_source_text": "Selecting an encoder is harder than training one.",
+    "rendered_offset": null,
+    "prefix_context": "",
+    "suffix_context": ""
+  },
+  "payload": {
+    "comment": "\"Selecting an encoder is harder than training one\" sounds more like a note for yourself, not for the readers. The tone needs to be improved. Consider using \"Encoder architecture is critical\" or so"
+  },
+  "created_at": "2026-09-10T17:38:22.345Z",
+  "resolution": {
+    "resolved_at": "2026-09-11T00:47:22Z",
+    "resolution_commit": null,
+    "note": "Heading now states the paragraph's conclusion: 'Model selection must be gated on a held-out probe.' Opening sentence de-diarised. 'Encoder architecture is critical' was not adopted because the paragraph never varies the architecture; it varies the selection rule. Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+  },
+  "thread": [
+    {
+      "id": "reply-e883c4e2",
+      "author": "paper-agent",
+      "role": "agent",
+      "body": "Heading now states the paragraph's conclusion: 'Model selection must be gated on a held-out probe.' Opening sentence de-diarised. 'Encoder architecture is critical' was not adopted because the paragraph never varies the architecture; it varies the selection rule.",
+      "created_at": "2026-09-11T00:47:22Z"
+    }
+  ]
+}

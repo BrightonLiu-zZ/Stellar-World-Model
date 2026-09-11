@@ -1,0 +1,38 @@
+{
+  "id": "89b1d8c7-bf6d-478e-b5c9-ff782e1a99ae",
+  "kind": "comment",
+  "status": "resolved",
+  "decision": null,
+  "head_commit": "fa8ede52cf8d737bb63ca1598b54db26378d6773",
+  "worktree_dirty": true,
+  "author": "Yue Ma",
+  "anchor": {
+    "file_hint": null,
+    "line_start_hint": null,
+    "line_end_hint": null,
+    "section": [],
+    "selected_rendered_text": "We train a Conv1D variational encoder with a recurrent latent-dynamics model on 195,883 unlabelled TESS two-minute light curves, freeze it, and evaluate the resulting star embedding on ten labelled tasks spanning variability classification, asteroseismology and rotation, against three baselines: the engineered features alone, an architecture-matched supervised Conv1D trained end-to-end, and an MLP on raw flux.",
+    "selected_source_text": "Self-supervised   models   promise   one   representation,   pre-trained   once   on\n              unlabelled  survey  data  and  read  out  cheaply  for  many  downstream  tasks.  In\n              stellar  time-domain  astronomy  that  promise  competes  with  a  strong,  cheap\n              incumbent:   a   few   dozen   hand-engineered   light-curve   statistics.   We   train\n              a  Conv1D  variational  encoder  with  a  recurrent  latent-dynamics  model  on\n              195,883  unlabelled  TESS  two-minute  light  curves,  freeze  it,  and  evaluate\n              the   resulting   star   embedding   on   ten   labelled   tasks   spanning   variability\n              classification,   asteroseismology   and   rotation,   against   three   baselines:   the\n              engineered    features    alone,    an    architecture-matched    supervised    Conv1D\n              trained   end-to-end,   and   an   MLP   on   raw   flux.   Concatenating   the   learned\n              embedding with the engineered features improves a frozen linear readout beyond",
+    "rendered_offset": null,
+    "prefix_context": "",
+    "suffix_context": ""
+  },
+  "payload": {
+    "comment": "This sentence is too long. Break it into short sentences and clarify what you did in each step."
+  },
+  "created_at": "2026-09-10T17:29:56.454Z",
+  "resolution": {
+    "resolved_at": "2026-09-11T00:47:22Z",
+    "resolution_commit": null,
+    "note": "Abstract sentence split into three (train+freeze / evaluate / baselines). 'star embedding' replaced by 'the features it has learned for each star'; every later 'embedding' of ours is now 'learned features' (the two remaining uses cite other papers' objects). Source change is in the working tree; paper/ is not yet committed (it is untracked in this repo). Rebuilt PDF: body ends on page 4. HTML projection regenerated."
+  },
+  "thread": [
+    {
+      "id": "reply-89b1d8c7",
+      "author": "paper-agent",
+      "role": "agent",
+      "body": "Abstract sentence split into three (train+freeze / evaluate / baselines). 'star embedding' replaced by 'the features it has learned for each star'; every later 'embedding' of ours is now 'learned features' (the two remaining uses cite other papers' objects).",
+      "created_at": "2026-09-11T00:47:22Z"
+    }
+  ]
+}

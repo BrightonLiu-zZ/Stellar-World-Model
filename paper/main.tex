@@ -14,6 +14,7 @@
 \usepackage{microtype}
 \usepackage{xcolor}
 \usepackage{graphicx}
+\usepackage{float}     % [H] for the Appendix B figure, so it stays with its paragraph
 
 % The workshop prescribes the first-page footer text. The style file is otherwise untouched.
 \makeatletter
@@ -33,19 +34,18 @@
 
 \begin{abstract}
 Self-supervised models promise one representation, pre-trained once on unlabelled survey data and
-read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise competes
-with a strong, cheap incumbent: a few dozen hand-engineered light-curve statistics. We train a
+read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise has to
+improve on a strong, cheap incumbent: a few dozen engineered light-curve statistics. We pre-train a
 Conv1D variational encoder with a recurrent latent-dynamics model on 195{,}883 unlabelled TESS
-two-minute light curves and freeze it. We then evaluate the features it has learned for each star on
-ten labelled tasks spanning variability classification, asteroseismology and rotation. Each task is
-scored against three baselines: the engineered features alone, an architecture-matched supervised
-Conv1D trained end-to-end, and an MLP on raw flux. Concatenating the learned and engineered features
-improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, while an untrained encoder
-does not. The
-same frozen pipeline is ahead of the supervised Conv1D on 6 of 10 tasks and indistinguishable from it
-on the other 4, and ahead of the raw-flux MLP on 9 of 10. \textbf{Self-supervision adds to engineered features rather than replacing them. Combined under a
-plain logistic regression, the two match end-to-end deep networks trained on the same labelled stars,
-669 to 16{,}002 per task.}
+two-minute light curves, freeze it, and ask whether the features it learns add anything to 25
+engineered features under one linear readout, on ten labelled tasks spanning variability
+classification, asteroseismology and rotation. Concatenating the two improves the readout beyond
+$2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder does not. Against two networks trained
+end-to-end on the same labelled stars, splits and inputs, the frozen readout is ahead of a supervised
+Conv1D with the encoder's architecture on 6 of 10 tasks and indistinguishable on the other 4, and
+ahead of an MLP on raw flux on 9 of 10. \textbf{Self-supervision adds to engineered features rather
+than replacing them. Under a plain logistic regression, the combination matches or exceeds the two
+supervised networks we train on the same 669 to 16{,}002 labelled stars per task.}
 \end{abstract}
 
 \section{Introduction}
@@ -70,7 +70,7 @@ carry information the engineered features do not already have?
 We take that question literally and measure it. We pre-train a latent-dynamics encoder on unlabelled
 TESS photometry, freeze it, and ask what the features it learns add to a 25-feature engineered stack under an
 identical linear readout -- and whether the resulting pipeline, which trains no deep network at
-readout time, is competitive with deep networks trained end-to-end on the same labels. Our
+readout time, matches or exceeds two networks trained end-to-end on the same labels. Our
 contributions are:
 
 \begin{itemize}
@@ -78,8 +78,9 @@ contributions are:
 them.} Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
 tasks, with the gains concentrated where the engineered basis is information-starved; an
 untrained-encoder control shows the effect is not generic column addition.
-\item \textbf{The combined pipeline, read out by logistic regression, is competitive with end-to-end
-deep learning on these labels.} Against an architecture-matched supervised Conv1D it is ahead on 6
+\item \textbf{The combined pipeline, read out by logistic regression, matches or exceeds the two
+supervised networks we train end-to-end on the same labels.} Against a supervised Conv1D with the
+encoder's architecture it is ahead on 6
 of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
 \end{itemize}
 
@@ -108,8 +109,7 @@ eight log-spaced frequency bands, spectral entropy and centroid, skew, kurtosis,
 scatter ratio, and three robust dispersion statistics. Readouts are deterministic and frozen,
 standardised on the training split alone: class-balanced $L_{2}$ logistic regression at a fixed
 $C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
-cross-validation. Cross-validating $C$ as well changes the reported gains by at most $0.011$, and the
-two tasks that move by more than $0.008$ both move in the fusion arm's favour. We compare four
+cross-validation (cross-validating $C$ as well moves no reported gain by more than $0.011$). We compare four
 arms, each the same readout on a different feature set: \texttt{features}, $\mu$,
 \texttt{features}\,$\oplus\,\mu$, and, as a control, the same fusion built on an \emph{untrained}
 encoder. The two supervised baselines of the next paragraph are the fifth and sixth arms.
@@ -120,7 +120,7 @@ a scalar head, and is trained per task with a star-level bag loss (the mean of t
 logits, taken in-graph) and class weighting. \textbf{C2} replaces the convolutional trunk with a
 dense one and changes nothing else, so C1 versus C2 isolates the convolutional inductive bias. Both
 use one pre-registered regularisation setting for all tasks, select on a validation split no probe
-has ever touched, and are trained with three seeds.
+has ever touched, and are trained with six seeds.
 
 \paragraph{Tasks and metrics.} We score ten tasks with one probe per physical quantity: pulsating
 variables \citep{gao2025}, eclipsing binaries \citep{prsa2022}, rotation and rotation period
@@ -138,7 +138,11 @@ initialisation and shuffling seeds (six, matching the pre-training count). Becau
 and an initialisation seed are different objects, differences between a $\mu$ arm and a supervised arm
 are treated as unpaired and their bands added in quadrature even at equal counts. The engineered arm is
 deterministic and carries no seed spread.
-A difference counts as resolved only when it exceeds the combined $2\,\mathrm{SE}$ band.
+A difference counts as resolved only when it exceeds the combined $2\,\mathrm{SE}$ band. These bands
+measure re-training spread only; a paired bootstrap over the test stars (1{,}000 resamples, every arm
+rescored on the same stars, seeds averaged; Appendix~\ref{app:bootstrap}) excludes zero on 5 of the 7
+fusion gains, 5 of the 6 leads over C1 and 7 of the 9 over C2, the rest stay ahead in at least 65\%
+of resamples, none changes sign, and the rows that loosen are the two 150--161-star tasks.
 
 \section{Results}
 
@@ -179,16 +183,15 @@ does not replace the features: it is ahead on only 4 of 10 tasks alone, which is
 \citet{li2025staremb} reach for foundation-model embeddings, and is why we report fusion rather than
 substitution \citep{makinen2024}.
 
-\paragraph{The frozen pipeline is competitive with end-to-end deep learning.} Against C1 -- the same
+\paragraph{The frozen pipeline matches or exceeds the two supervised networks.} Against C1 -- the same
 convolutional trunk, the same labels, the same input windows, trained end-to-end -- the frozen fusion
 probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
 (Figure~\ref{fig:deltas}b). Against
 C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
 stars). C1 is not weak: it clears the engineered arm on 5 of 10 and the $\mu$-only arm on 4, and on
-eight tasks the frozen probe recovers $0.98$--$1.09$ of its margin above the metric floor.
-The correct reading of this comparison is
-\emph{not} that self-supervision matches supervision in general. It matches what this architecture
-reaches on the labels that actually exist, which range from 669 to 16{,}002 labelled stars per task.
+seven tasks the frozen probe recovers $0.98$--$1.09$ of its margin above the metric floor.
+This is a statement about what this architecture reaches on 669 to 16{,}002 labelled stars per task,
+not about supervision in general.
 
 \paragraph{The latent-dynamics term is what buys the complementarity.} Replacing the
 forward--backward dynamics objective with a dynamics-free variant, all else fixed and the same six
@@ -201,25 +204,23 @@ the autoencoder alone, supplies the information the engineered features lack.
 
 \paragraph{Model selection must be gated on a held-out probe.} Model selection, not optimisation, is
 where this pipeline is fragile. The reconstruction objective develops a localised artifact at the
-window boundary, and none of eleven interventions across four families of fix satisfied both
-pre-registered acceptance criteria, so the tapered variant shipped on the stated rule, not because it
-won. Underlying this is a
-measurement we think generalises. Across ten pre-training
-recipes, validation reconstruction \emph{anti}-predicts downstream probe score: the Spearman $\rho$
-between negated validation reconstruction and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks, the
-loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs $0.021$--$0.049$
-PR-AUC. The effect lives across recipes, not across seeds of one recipe, where no label-free metric we
-tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on
+window boundary, and none of eleven interventions satisfied both pre-registered acceptance criteria,
+so the tapered variant shipped on the stated rule, not because it won. Underlying this is one measurement (Appendix~\ref{app:valloss}). Across ten pre-training
+recipes of one sweep, validation reconstruction \emph{anti}-predicts downstream probe score: the
+Spearman $\rho$ between negated validation reconstruction and PR-AUC runs from $-0.58$ to $-0.84$ over
+four tasks, the loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs
+$0.021$--$0.049$ PR-AUC. The effect lives across recipes, not across seeds of one recipe, where no
+label-free metric we tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on
 its own objective and must be gated on a held-out probe.
 
 \paragraph{\textbf{Limitations and next steps.}} The four linear-readout arms (\texttt{features},
 $\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
 parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
-is between feature sets. Our claim is made for a linear readout, and we make no claim about more
-powerful readouts. Our corpus is the bright ($T < 10$) two-minute sample, and every arm, the two
-supervised baselines included, sees one 5.7-day segment per star. The fainter and far more numerous
-stars, and longer light curves spanning several TESS sectors, are the obvious next experiments; the
-latter would let rotation periods longer than 5.7 days be measured, which one segment cannot do. Our
+is between feature sets. Our claim is made for these 25 engineered features and a linear readout;
+we make no claim about other feature sets or more powerful readouts. Our corpus is the bright ($T < 10$) two-minute sample, and every arm, the two
+supervised baselines included, sees one 5.7-day segment per star. The fainter, far more numerous
+stars and light curves spanning several TESS sectors are the obvious next experiments; the latter
+would let rotation periods longer than 5.7 days be measured, which one segment cannot do. Our
 negatives are stars absent from the label catalogues, not stars verified to lack the signal, so a
 correct detection the catalogue missed counts against us; every detection score is therefore a lower
 bound. The flare label marks stars that have flared somewhere in their TESS data, not a flare inside
@@ -228,11 +229,10 @@ the readout is trained on one percent of the labels, the advantage narrows on 6 
 much pre-training helps when labels are scarce remains an open question.
 
 \paragraph{Reproducibility and disclosure.} \S2 gives the corpus cut, geometry, features, objective
-and readouts; the remaining sizes are four convolutional stages of width $32/64/128/256$, kernel 5,
-each halving length, a 128-dimensional Gaussian latent, and a single-layer GRU of width 256 across the
-16 windows. Splits are by star, drawn once, and shared byte-for-byte by every arm, including both
-supervised baselines, which reproduce the probe's star sets and test counts exactly. Code and score tables
-will be released on publication; generative AI assisted with analysis code and prose editing.
+and readouts; the encoder has four convolutional stages of width $32/64/128/256$ (kernel 5, each
+halving length), a 128-dimensional Gaussian latent and a single-layer GRU of width 256. Splits are by
+star, drawn once and shared byte-for-byte by every arm, the supervised baselines included. Code and
+score tables will be released on publication; generative AI assisted with analysis code and prose editing.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
@@ -276,5 +276,55 @@ measures the quantity the label encodes; the $0.758$ the features reach rides on
 evolutionary state rather than on its discriminant. The row behaves accordingly: it is the only one
 where C2 ($0.762$) is ahead of the frozen probe while C1 reaches only $0.530$ on 755 training stars,
 and it carries the smallest test set in the study.
+
+\section{Validation reconstruction against downstream score}
+\label{app:valloss}
+\raggedbottom
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/figB_valloss.pdf}
+\caption{One point per pre-training recipe (mean over its four seeds), one panel per task. The ten
+recipes share corpus, architecture and loss terms and differ only in the latent-dynamics term (off,
+forward, forward+backward, multi-step, the last three at three weights). $x$: best post-warm-up
+validation reconstruction loss; $y$: PR-AUC of the frozen linear probe on $\mu$; $\rho$: Spearman's
+between negated loss and score.}
+\label{fig:valloss}
+\end{figure}
+
+Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph of \S4. The
+loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
+next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
+probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
+from $-0.43$ to $-0.87$. Two limits on what the figure shows. The recipes are an earlier sweep than
+the shipped encoder (they carry an earlier spectral auxiliary term), so the figure establishes that
+the anti-correlation exists in this family, not its size for the final recipe. And it is a statement
+across recipes only: within one recipe, across its seeds, no label-free curve metric we tried
+(reconstruction, reconstruction plus auxiliary, active latent units) ranks the seeds, every such
+correlation sitting within $\pm 0.3$ of zero.
+
+\section{Paired bootstrap over test stars}
+\label{app:bootstrap}
+
+The $2\,\mathrm{SE}$ bands in the body come from re-training and say nothing about whether the
+particular test stars favoured one arm. For every printed contrast we therefore resample each task's
+test set with replacement 1{,}000 times, rescore every arm on the identical resampled list from its
+saved per-star predictions (no model is retrained), average each arm over its seeds, and take the
+difference. Table~\ref{tab:bootstrap} gives the 95\% percentile interval of that difference and the
+share of resamples in which the fusion arm is ahead; intervals that exclude zero are bold. The check
+tightens no verdict and reverses none: every row the body calls ahead has the fusion arm ahead in at
+least 65\% of resamples. It does loosen the smallest tasks -- rotation period (150 test stars) and
+RGB versus helium-burning (161) account for four of the ten rows where a resolved $2\,\mathrm{SE}$
+verdict becomes an interval that touches zero.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\input{tables/tableC_bootstrap.tex}
+\caption{Paired star-bootstrap of the four contrasts the body counts. Each entry is the 95\% interval
+of (left arm $-$ right arm) over 1{,}000 resamples of the test stars, seeds averaged, and the share of
+resamples with the difference above zero. Bold: interval excludes zero.}
+\label{tab:bootstrap}
+\end{table}
 
 \end{document}

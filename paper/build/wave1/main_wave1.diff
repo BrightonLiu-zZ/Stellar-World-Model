@@ -1,0 +1,133 @@
+diff --git a/build/wave1/main_before.tex b/main.tex
+index 0d5d366..ea5ec03 100644
+--- a/build/wave1/main_before.tex
++++ b/main.tex
+@@ -36,15 +36,16 @@ Self-supervised models promise one representation, pre-trained once on unlabelle
+ read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise competes
+ with a strong, cheap incumbent: a few dozen hand-engineered light-curve statistics. We train a
+ Conv1D variational encoder with a recurrent latent-dynamics model on 195{,}883 unlabelled TESS
+-two-minute light curves, freeze it, and evaluate the resulting star embedding on ten labelled tasks
+-spanning variability classification, asteroseismology and rotation, against three baselines: the
+-engineered features alone, an architecture-matched supervised Conv1D trained end-to-end, and an MLP
+-on raw flux. Concatenating the learned embedding with the engineered features improves a frozen
+-linear readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, while an untrained encoder does not. The
++two-minute light curves and freeze it. We then evaluate the features it has learned for each star on
++ten labelled tasks spanning variability classification, asteroseismology and rotation. Each task is
++scored against three baselines: the engineered features alone, an architecture-matched supervised
++Conv1D trained end-to-end, and an MLP on raw flux. Concatenating the learned and engineered features
++improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, while an untrained encoder
++does not. The
+ same frozen pipeline is ahead of the supervised Conv1D on 6 of 10 tasks and indistinguishable from it
+-on the other 4, and ahead of the raw-flux MLP on 9 of 10. \textbf{A learned representation and hand-built features are
+-complementary rather than competing, and once combined, plain logistic regression on frozen
+-features matches what end-to-end deep networks reach on the labels that exist.}
++on the other 4, and ahead of the raw-flux MLP on 9 of 10. \textbf{Self-supervision adds to engineered features rather than replacing them. Combined under a
++plain logistic regression, the two match end-to-end deep networks trained on the same labelled stars,
++669 to 16{,}002 per task.}
+ \end{abstract}
+ 
+ \section{Introduction}
+@@ -67,13 +68,13 @@ representation for this data therefore has to answer a specific question, not a
+ carry information the engineered features do not already have?
+ 
+ We take that question literally and measure it. We pre-train a latent-dynamics encoder on unlabelled
+-TESS photometry, freeze it, and ask what its embedding adds to a 25-feature engineered stack under an
++TESS photometry, freeze it, and ask what the features it learns add to a 25-feature engineered stack under an
+ identical linear readout -- and whether the resulting pipeline, which trains no deep network at
+ readout time, is competitive with deep networks trained end-to-end on the same labels. Our
+ contributions are:
+ 
+ \begin{itemize}
+-\item \textbf{The learned embedding is complementary to engineered features, not a replacement for
++\item \textbf{The learned features are complementary to the engineered ones, not a replacement for
+ them.} Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
+ tasks, with the gains concentrated where the engineered basis is information-starved; an
+ untrained-encoder control shows the effect is not generic column addition.
+@@ -99,7 +100,7 @@ window reconstruction, the KL term, the latent-dynamics prediction error, and a
+ auxiliary term that penalises reconstruction error in the log periodogram. The encoder is trained
+ once with six random seeds and then frozen; no gradient from any label ever reaches it.
+ 
+-\paragraph{Representations and readout.} A star is represented by $\mu$, the mean over its first
++\paragraph{Representations and readout.} A star's learned features are $\mu$, the mean over its first
+ segment (16--20 windows) of the per-window posterior means. The engineered baseline is a fixed
+ 25-feature vector modelled on the T'DA variability pipeline \citep{audenaert2021}: the three
+ strongest periodogram peaks with their normalised powers and ratios, a harmonic-power ratio, power in
+@@ -108,9 +109,10 @@ scatter ratio, and three robust dispersion statistics. Readouts are deterministi
+ standardised on the training split alone: class-balanced $L_{2}$ logistic regression at a fixed
+ $C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
+ cross-validation. Cross-validating $C$ as well changes the reported gains by at most $0.011$, and the
+-two tasks that move by more than $0.008$ both move in the fusion arm's favour. We report four
+-arms -- \texttt{features}, $\mu$, \texttt{features}\,$\oplus\,\mu$, and the same fusion built on an
+-\emph{untrained} encoder as a control.
++two tasks that move by more than $0.008$ both move in the fusion arm's favour. We compare four
++arms, each the same readout on a different feature set: \texttt{features}, $\mu$,
++\texttt{features}\,$\oplus\,\mu$, and, as a control, the same fusion built on an \emph{untrained}
++encoder. The two supervised baselines of the next paragraph are the fifth and sixth arms.
+ 
+ \paragraph{Supervised baselines.} Two end-to-end baselines see exactly the same input windows, star
+ sets and splits. \textbf{C1} reuses the encoder's convolutional trunk verbatim, adds a bottleneck and
+@@ -154,7 +156,7 @@ is only the point-estimate argmax. $n$ is the test-star count and prev.\ the pos
+ \begin{figure}[t]
+ \centering
+ \includegraphics[width=\linewidth]{figures/fig1_deltas.pdf}
+-\caption{The two claims. \textbf{(a)} What the learned embedding adds to the engineered features under
++\caption{The two claims. \textbf{(a)} What the learned features add to the engineered features under
+ an identical frozen linear readout, for the shipped encoder, the same recipe with the latent-dynamics
+ term removed, and an untrained-encoder control. \textbf{(b)} The frozen fusion probe against the two
+ end-to-end supervised baselines. Bars are $2\,\mathrm{SE}$; the untrained control is a single encoder
+@@ -162,7 +164,7 @@ and carries none.}
+ \label{fig:deltas}
+ \end{figure}
+ 
+-\paragraph{The learned embedding adds to the engineered features.} Table~\ref{tab:scorecard} and
++\paragraph{The learned features add to the engineered features.} Table~\ref{tab:scorecard} and
+ Figure~\ref{fig:deltas}a give the comparison. Concatenating $\mu$ with the 25 features improves the
+ frozen readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
+ pulsating $+0.057$ and flare activity $+0.051$, and reaching $+0.013$ ($R^{2}$) on rotation period.
+@@ -197,8 +199,8 @@ the autoencoder alone, supplies the information the engineered features lack.
+ 
+ \section{Discussion}
+ 
+-\paragraph{Selecting an encoder is harder than training one.} Our largest practical difficulty was
+-not optimisation but model selection. The reconstruction objective develops a localised artifact at the
++\paragraph{Model selection must be gated on a held-out probe.} Model selection, not optimisation, is
++where this pipeline is fragile. The reconstruction objective develops a localised artifact at the
+ window boundary, and none of eleven interventions across four families of fix satisfied both
+ pre-registered acceptance criteria, so the tapered variant shipped on the stated rule, not because it
+ won. Underlying this is a
+@@ -210,21 +212,20 @@ PR-AUC. The effect lives across recipes, not across seeds of one recipe, where n
+ tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on
+ its own objective and must be gated on a held-out probe.
+ 
+-\paragraph{\textbf{Limitations.}} Every comparison here is made under a linear readout, which is a
+-choice rather than a concession: logistic regression over named axes is cheap, auditable, and stable
+-enough that a change in the data appears in the coefficients rather than in the optimiser. We claim
+-complementarity in that setting, not for readouts of arbitrary capacity.
+-Our corpus is the bright ($T < 10$) two-minute sample, which is
+-better studied and less confused than the faint population a survey-scale claim would need. Every arm
+-sees only each star's first segment ($\approx 5.7$\,d), which equalises access but bounds the
+-supervised baselines at the probe's input scope rather than in general. Our labels come from incomplete catalogues, so a
+-model-positive, catalogue-negative star scores as a false positive even when genuine. Rotation-period regression saturates at the 5.69-day input
+-baseline -- stars with true periods averaging 8.60 and 17.34 days are both answered near 5.6 -- so its
+-$R^{2}$ is not period inference beyond the segment length. Flare is an activity label, not a detection
+-label: 81\% of labelled positives show no catalogued flare inside the encoded segment, so we claim
+-flare propensity only; auditing its negative class against the detector's own published search cut
+-moved the gain from $+0.0506$ to $+0.0507$. Under this frozen readout the advantage is also a
+-large-label phenomenon, narrowing on 6 of 10 tasks as the labelled budget falls towards one percent.
++\paragraph{\textbf{Limitations and next steps.}} The four linear-readout arms (\texttt{features},
++$\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
++parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
++is between feature sets. Our claim is made for a linear readout, and we make no claim about more
++powerful readouts. Our corpus is the bright ($T < 10$) two-minute sample, and every arm, the two
++supervised baselines included, sees one 5.7-day segment per star. The fainter and far more numerous
++stars, and longer light curves spanning several TESS sectors, are the obvious next experiments; the
++latter would let rotation periods longer than 5.7 days be measured, which one segment cannot do. Our
++negatives are stars absent from the label catalogues, not stars verified to lack the signal, so a
++correct detection the catalogue missed counts against us; every detection score is therefore a lower
++bound. The flare label marks stars that have flared somewhere in their TESS data, not a flare inside
++the 5.7-day segment we encode, so the task is recognising a flaring star, not finding a flare. When
++the readout is trained on one percent of the labels, the advantage narrows on 6 of 10 tasks, so how
++much pre-training helps when labels are scarce remains an open question.
+ 
+ \paragraph{Reproducibility and disclosure.} \S2 gives the corpus cut, geometry, features, objective
+ and readouts; the remaining sizes are four convolutional stages of width $32/64/128/256$, kernel 5,

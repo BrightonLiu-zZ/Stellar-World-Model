@@ -1,0 +1,384 @@
+\documentclass{article}
+%DIF LATEXDIFF DIFFERENCE FILE
+%DIF DEL build/wave1/main_before.tex   Thu Sep 10 17:44:35 2026
+%DIF ADD main.tex                      Thu Sep 10 17:45:44 2026
+
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}   % \lesssim in Appendix A; amsmath alone does not define it
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+% The workshop prescribes the first-page footer text. The style file is otherwise untouched.
+\makeatletter
+\renewcommand{\@noticestring}{%
+  Submitted to the 9th Workshop on Machine Learning and the Physical Sciences (ML4PS 2026).
+  Do not distribute.%
+}
+\makeatother
+
+\title{What does self-supervision add to engineered features\\for stellar light curves?}
+
+\author{Anonymous Author(s)\\Affiliation\\Address\\\texttt{email}}
+
+%DIF PREAMBLE EXTENSION ADDED BY LATEXDIFF
+%DIF CFONT PREAMBLE %DIF PREAMBLE
+\RequirePackage{color}\definecolor{RED}{rgb}{1,0,0}\definecolor{BLUE}{rgb}{0,0,1} %DIF PREAMBLE
+\DeclareOldFontCommand{\sf}{\normalfont\sffamily}{\mathsf} %DIF PREAMBLE
+\providecommand{\DIFaddtex}[1]{{\protect\color{blue} \sf #1}} %DIF PREAMBLE
+\providecommand{\DIFdeltex}[1]{{\protect\color{red} \scriptsize #1}} %DIF PREAMBLE
+%DIF SAFE PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFaddbegin}{} %DIF PREAMBLE
+\providecommand{\DIFaddend}{} %DIF PREAMBLE
+\providecommand{\DIFdelbegin}{} %DIF PREAMBLE
+\providecommand{\DIFdelend}{} %DIF PREAMBLE
+\providecommand{\DIFmodbegin}{} %DIF PREAMBLE
+\providecommand{\DIFmodend}{} %DIF PREAMBLE
+%DIF FLOATSAFE PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFaddFL}[1]{\DIFadd{#1}} %DIF PREAMBLE
+\providecommand{\DIFdelFL}[1]{\DIFdel{#1}} %DIF PREAMBLE
+\providecommand{\DIFaddbeginFL}{} %DIF PREAMBLE
+\providecommand{\DIFaddendFL}{} %DIF PREAMBLE
+\providecommand{\DIFdelbeginFL}{} %DIF PREAMBLE
+\providecommand{\DIFdelendFL}{} %DIF PREAMBLE
+%DIF HYPERREF PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFadd}[1]{\texorpdfstring{\DIFaddtex{#1}}{#1}} %DIF PREAMBLE
+\providecommand{\DIFdel}[1]{\texorpdfstring{\DIFdeltex{#1}}{}} %DIF PREAMBLE
+\providecommand{\DIFscaledelfig}{0.5}
+%DIF HIGHLIGHTGRAPHICS PREAMBLE %DIF PREAMBLE
+\RequirePackage{settobox} %DIF PREAMBLE
+\RequirePackage{letltxmacro} %DIF PREAMBLE
+\newsavebox{\DIFdelgraphicsbox} %DIF PREAMBLE
+\newlength{\DIFdelgraphicswidth} %DIF PREAMBLE
+\newlength{\DIFdelgraphicsheight} %DIF PREAMBLE
+% store original definition of \includegraphics %DIF PREAMBLE
+\LetLtxMacro{\DIFOincludegraphics}{\includegraphics} %DIF PREAMBLE
+\providecommand{\DIFaddincludegraphics}[2][]{{\color{blue}\fbox{\DIFOincludegraphics[#1]{#2}}}} %DIF PREAMBLE
+\providecommand{\DIFdelincludegraphics}[2][]{% %DIF PREAMBLE
+\sbox{\DIFdelgraphicsbox}{\DIFOincludegraphics[#1]{#2}}% %DIF PREAMBLE
+\settoboxwidth{\DIFdelgraphicswidth}{\DIFdelgraphicsbox} %DIF PREAMBLE
+\settoboxtotalheight{\DIFdelgraphicsheight}{\DIFdelgraphicsbox} %DIF PREAMBLE
+\scalebox{\DIFscaledelfig}{% %DIF PREAMBLE
+\parbox[b]{\DIFdelgraphicswidth}{\usebox{\DIFdelgraphicsbox}\\[-\baselineskip] \rule{\DIFdelgraphicswidth}{0em}}\llap{\resizebox{\DIFdelgraphicswidth}{\DIFdelgraphicsheight}{% %DIF PREAMBLE
+\setlength{\unitlength}{\DIFdelgraphicswidth}% %DIF PREAMBLE
+\begin{picture}(1,1)% %DIF PREAMBLE
+\thicklines\linethickness{2pt} %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,0){\framebox(1,1){}}}% %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,0){\line( 1,1){1}}}% %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,1){\line(1,-1){1}}}% %DIF PREAMBLE
+\end{picture}% %DIF PREAMBLE
+}\hspace*{3pt}}} %DIF PREAMBLE
+} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddbegin}{\DIFaddbegin} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddend}{\DIFaddend} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelbegin}{\DIFdelbegin} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelend}{\DIFdelend} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddbegin}{\DIFOaddbegin \let\includegraphics\DIFaddincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddend}{\DIFOaddend \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelbegin}{\DIFOdelbegin \let\includegraphics\DIFdelincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelend}{\DIFOaddend \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddbeginFL}{\DIFaddbeginFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddendFL}{\DIFaddendFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelbeginFL}{\DIFdelbeginFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelendFL}{\DIFdelendFL} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddbeginFL}{\DIFOaddbeginFL \let\includegraphics\DIFaddincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddendFL}{\DIFOaddendFL \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelbeginFL}{\DIFOdelbeginFL \let\includegraphics\DIFdelincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelendFL}{\DIFOaddendFL \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+%DIF COLORLISTINGS PREAMBLE %DIF PREAMBLE
+\RequirePackage{listings} %DIF PREAMBLE
+\RequirePackage{color} %DIF PREAMBLE
+\lstdefinelanguage{DIFcode}{ %DIF PREAMBLE
+%DIF DIFCODE_CFONT %DIF PREAMBLE
+  moredelim=[il][\color{red}\scriptsize]{\%DIF\ <\ }, %DIF PREAMBLE
+  moredelim=[il][\color{blue}\sffamily]{\%DIF\ >\ } %DIF PREAMBLE
+} %DIF PREAMBLE
+\lstdefinestyle{DIFverbatimstyle}{ %DIF PREAMBLE
+	language=DIFcode, %DIF PREAMBLE
+	basicstyle=\ttfamily, %DIF PREAMBLE
+	columns=fullflexible, %DIF PREAMBLE
+	keepspaces=true %DIF PREAMBLE
+} %DIF PREAMBLE
+\lstnewenvironment{DIFverbatim}[1][]{\lstset{style=DIFverbatimstyle}}{} %DIF PREAMBLE
+\lstnewenvironment{DIFverbatim*}[1][]{\lstset{style=DIFverbatimstyle,showspaces=true}}{} %DIF PREAMBLE
+\lstset{extendedchars=\true,inputencoding=utf8}
+
+%DIF END PREAMBLE EXTENSION ADDED BY LATEXDIFF
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Self-supervised models promise one representation, pre-trained once on unlabelled survey data and
+read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise competes
+with a strong, cheap incumbent: a few dozen hand-engineered light-curve statistics. We train a
+Conv1D variational encoder with a recurrent latent-dynamics model on 195{,}883 unlabelled TESS
+two-minute light curves \DIFdelbegin \DIFdel{, freeze it, and evaluate the resulting star embedding }\DIFdelend \DIFaddbegin \DIFadd{and freeze it. We then evaluate the features it has learned for each star }\DIFaddend on
+ten labelled tasks spanning variability classification, asteroseismology and rotation\DIFdelbegin \DIFdel{, }\DIFdelend \DIFaddbegin \DIFadd{. Each task is
+scored }\DIFaddend against three baselines: the engineered features alone, an architecture-matched supervised
+Conv1D trained end-to-end, and an MLP on raw flux. Concatenating the learned \DIFdelbegin \DIFdel{embedding with the }\DIFdelend \DIFaddbegin \DIFadd{and }\DIFaddend engineered features
+improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, while an untrained encoder
+does not. The
+same frozen pipeline is ahead of the supervised Conv1D on 6 of 10 tasks and indistinguishable from it
+on the other 4, and ahead of the raw-flux MLP on 9 of 10. \textbf{\DIFdelbegin \DIFdel{A learned representation and hand-built }\DIFdelend \DIFaddbegin \DIFadd{Self-supervision adds to engineered }\DIFaddend features \DIFdelbegin \DIFdel{are
+complementary }\DIFdelend rather than \DIFdelbegin \DIFdel{competing, and once combined, }\DIFdelend \DIFaddbegin \DIFadd{replacing them. Combined under a
+}\DIFaddend plain logistic regression\DIFdelbegin \DIFdel{on frozen
+features matches what }\DIFdelend \DIFaddbegin \DIFadd{, the two match }\DIFaddend end-to-end deep networks \DIFdelbegin \DIFdel{reach }\DIFdelend \DIFaddbegin \DIFadd{trained }\DIFaddend on the \DIFdelbegin \DIFdel{labels that exist}\DIFdelend \DIFaddbegin \DIFadd{same labelled stars,
+669 to 16}{\DIFadd{,}}\DIFadd{002 per task}\DIFaddend .}
+\end{abstract}
+
+\section{Introduction}
+
+Wide-field photometric surveys now produce light curves far faster than they can be labelled. TESS
+\citep{ricker2015} has observed hundreds of thousands of bright stars at two-minute cadence, and
+LSST \citep{ivezic2019} will enlarge the gap by orders of magnitude. Self-supervised learning is the
+natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
+each scientific question. This shape has recently been pursued for astronomical light curves by
+\citet{donoso2025astromer2}, \citet{zuo2025falco} and \citet{rui2026jepa}, and for TESS by
+\citet{poznanski2026}, who validates with embedding diagnostics rather than downstream tasks.
+
+What makes this domain unusual is the strength of the incumbent it must improve on. Decades of variable-star
+research have distilled light curves into compact engineered summaries -- periodogram peak structure,
+band-limited power, spectral entropy, robust scatter statistics -- and pipelines built on them remain
+highly competitive \citep{audenaert2021}. The benchmark of \citet{li2025staremb} makes the point
+sharply: across seven expert-labelled variable-star classes, no time-series foundation model they
+tested strictly surpassed the long-established domain feature baseline on classification. A learned
+representation for this data therefore has to answer a specific question, not a generic one: does it
+carry information the engineered features do not already have?
+
+We take that question literally and measure it. We pre-train a latent-dynamics encoder on unlabelled
+TESS photometry, freeze it, and ask what \DIFdelbegin \DIFdel{its embedding adds }\DIFdelend \DIFaddbegin \DIFadd{the features it learns add }\DIFaddend to a 25-feature engineered stack under an
+identical linear readout -- and whether the resulting pipeline, which trains no deep network at
+readout time, is competitive with deep networks trained end-to-end on the same labels. Our
+contributions are:
+
+\begin{itemize}
+\item \textbf{The learned \DIFdelbegin \DIFdel{embedding is }\DIFdelend \DIFaddbegin \DIFadd{features are }\DIFaddend complementary to \DIFaddbegin \DIFadd{the }\DIFaddend engineered \DIFdelbegin \DIFdel{features}\DIFdelend \DIFaddbegin \DIFadd{ones}\DIFaddend , not a replacement for
+them.} Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
+tasks, with the gains concentrated where the engineered basis is information-starved; an
+untrained-encoder control shows the effect is not generic column addition.
+\item \textbf{The combined pipeline, read out by logistic regression, is competitive with end-to-end
+deep learning on these labels.} Against an architecture-matched supervised Conv1D it is ahead on 6
+of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
+\end{itemize}
+
+\section{Data and method}
+
+\paragraph{Data.} We use TESS two-minute SPOC PDCSAP photometry for 195{,}883 stars brighter than
+$T = 10$. Each light curve is split into contiguous segments at runs of missing cadences and at time
+gaps exceeding five times the median cadence; segments are median-normalised by their median absolute
+deviation and sliced into non-overlapping windows of 256 cadences ($\approx 8.5$\,h). Missing values
+are never interpolated or padded -- any window containing one is discarded, and segments are never
+stitched across sector or gap boundaries. Pre-training consumes sequences of 16 consecutive windows
+($\approx 5.69$\,d) and uses no labels of any kind.
+
+\paragraph{Encoder.} A 1D convolutional variational encoder \citep{kingma2014} maps each window to a
+128-dimensional Gaussian posterior, and a GRU \citep{cho2014} predicts the next window's latent from
+its predecessors, run both forward and backward over the sequence. The training objective combines
+window reconstruction, the KL term, the latent-dynamics prediction error, and a Hann-tapered spectral
+auxiliary term that penalises reconstruction error in the log periodogram. The encoder is trained
+once with six random seeds and then frozen; no gradient from any label ever reaches it.
+
+\paragraph{Representations and readout.} A star\DIFdelbegin \DIFdel{is represented by }\DIFdelend \DIFaddbegin \DIFadd{'s learned features are }\DIFaddend $\mu$, the mean over its first
+segment (16--20 windows) of the per-window posterior means. The engineered baseline is a fixed
+25-feature vector modelled on the T'DA variability pipeline \citep{audenaert2021}: the three
+strongest periodogram peaks with their normalised powers and ratios, a harmonic-power ratio, power in
+eight log-spaced frequency bands, spectral entropy and centroid, skew, kurtosis, point-to-point
+scatter ratio, and three robust dispersion statistics. Readouts are deterministic and frozen,
+standardised on the training split alone: class-balanced $L_{2}$ logistic regression at a fixed
+$C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
+cross-validation. Cross-validating $C$ as well changes the reported gains by at most $0.011$, and the
+two tasks that move by more than $0.008$ both move in the fusion arm's favour. We \DIFdelbegin \DIFdel{report four
+arms-- }\DIFdelend \DIFaddbegin \DIFadd{compare four
+arms, each the same readout on a different feature set: }\DIFaddend \texttt{features}, $\mu$,
+\texttt{features}\,$\oplus\,\mu$, and\DIFaddbegin \DIFadd{, as a control, }\DIFaddend the same fusion built on an \emph{untrained}
+encoder\DIFdelbegin \DIFdel{as a control. }\DIFdelend \DIFaddbegin \DIFadd{. The two supervised baselines of the next paragraph are the fifth and sixth arms.
+}\DIFaddend 
+
+\paragraph{Supervised baselines.} Two end-to-end baselines see exactly the same input windows, star
+sets and splits. \textbf{C1} reuses the encoder's convolutional trunk verbatim, adds a bottleneck and
+a scalar head, and is trained per task with a star-level bag loss (the mean of the star's window
+logits, taken in-graph) and class weighting. \textbf{C2} replaces the convolutional trunk with a
+dense one and changes nothing else, so C1 versus C2 isolates the convolutional inductive bias. Both
+use one pre-registered regularisation setting for all tasks, select on a validation split no probe
+has ever touched, and are trained with three seeds.
+
+\paragraph{Tasks and metrics.} We score ten tasks with one probe per physical quantity: pulsating
+variables \citep{gao2025}, eclipsing binaries \citep{prsa2022}, rotation and rotation period
+\citep{boyle2026}, transits \citep{guerrero2021}, flare activity \citep{seli2025,vida2021},
+oscillating red giants and their $\nu_{\max}$ \citep{hon2021}, solar-like oscillators
+\citep{hatt2023}, and RGB versus helium-burning discrimination \citep{sreenivas2026}. Here
+$\nu_{\max}$ is the frequency of maximum oscillation power. Detection tasks are scored by the area
+under the precision--recall curve (PR-AUC), whose floor is the positive-class prevalence rather than
+$0.5$; prevalence is therefore quoted with every detection score. The two regressions are scored by
+$R^{2}$.
+
+\paragraph{Uncertainties.} All error bars are $2\times$ the standard error of the mean over seeds.
+For the $\mu$ arms the seeds are independent pre-training runs (six); for C1 and C2 they are
+initialisation and shuffling seeds (six, matching the pre-training count). Because a pre-training seed
+and an initialisation seed are different objects, differences between a $\mu$ arm and a supervised arm
+are treated as unpaired and their bands added in quadrature even at equal counts. The engineered arm is
+deterministic and carries no seed spread.
+A difference counts as resolved only when it exceeds the combined $2\,\mathrm{SE}$ band.
+
+\section{Results}
+
+\begin{table}[t]
+\caption{Ten-task scorecard. Linear-readout arms use a frozen logistic or ridge readout on the
+mean-pooled representation; the two supervised arms are trained end-to-end per task. Bold marks a
+leader separated from the runner-up by the combined $2\,\mathrm{SE}$ band; italic marks a leader that
+is only the point-estimate argmax. $n$ is the test-star count and prev.\ the positive-class prevalence.}
+\label{tab:scorecard}
+\centering
+\small
+\input{tables/table1_scorecard}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig1_deltas.pdf}
+\caption{The two claims. \textbf{(a)} What the learned \DIFdelbeginFL \DIFdelFL{embedding adds }\DIFdelendFL \DIFaddbeginFL \DIFaddFL{features add }\DIFaddendFL to the engineered features under
+an identical frozen linear readout, for the shipped encoder, the same recipe with the latent-dynamics
+term removed, and an untrained-encoder control. \textbf{(b)} The frozen fusion probe against the two
+end-to-end supervised baselines. Bars are $2\,\mathrm{SE}$; the untrained control is a single encoder
+and carries none.}
+\label{fig:deltas}
+\end{figure}
+
+\paragraph{The learned \DIFdelbegin \DIFdel{embedding adds }\DIFdelend \DIFaddbegin \DIFadd{features add }\DIFaddend to the engineered features.} Table~\ref{tab:scorecard} and
+Figure~\ref{fig:deltas}a give the comparison. Concatenating $\mu$ with the 25 features improves the
+frozen readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
+pulsating $+0.057$ and flare activity $+0.051$, and reaching $+0.013$ ($R^{2}$) on rotation period.
+Rotation is positive but just short of the
+bar ($+0.016$ against $0.016$). The two negative tasks are the ones where the engineered basis is
+already saturated or the probe is small: oscillating giants ($-0.003$, on a baseline of $0.920$) and
+RGB versus helium-burning ($-0.051$, 161 test stars). On both, an untrained-encoder control loses by an amount we cannot resolve from the trained
+fusion's -- the signature of extra collinear columns diluting a linear fit, not of $\mu$ carrying
+misleading content; Appendix~\ref{app:negatives} gives both rows in full. Across all ten tasks the untrained control is negative on seven
+and never exceeds $+0.016$, so the gains are specific to what pre-training learned. $\mu$ on its own
+does not replace the features: it is ahead on only 4 of 10 tasks alone, which is the same conclusion
+\citet{li2025staremb} reach for foundation-model embeddings, and is why we report fusion rather than
+substitution \citep{makinen2024}.
+
+\paragraph{The frozen pipeline is competitive with end-to-end deep learning.} Against C1 -- the same
+convolutional trunk, the same labels, the same input windows, trained end-to-end -- the frozen fusion
+probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
+(Figure~\ref{fig:deltas}b). Against
+C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
+stars). C1 is not weak: it clears the engineered arm on 5 of 10 and the $\mu$-only arm on 4, and on
+eight tasks the frozen probe recovers $0.98$--$1.09$ of its margin above the metric floor.
+The correct reading of this comparison is
+\emph{not} that self-supervision matches supervision in general. It matches what this architecture
+reaches on the labels that actually exist, which range from 669 to 16{,}002 labelled stars per task.
+
+\paragraph{The latent-dynamics term is what buys the complementarity.} Replacing the
+forward--backward dynamics objective with a dynamics-free variant, all else fixed and the same six
+seeds, reduces the fusion gain on all 10 tasks, and by more than $2\,\mathrm{SE}$ on 6 when the two
+arms are differenced seed by seed (Figure~\ref{fig:deltas}a, open triangles; largest losses solar-like
+oscillators $-0.047$, rotation $-0.026$, $\nu_{\max}$ $-0.025$). The recurrent prediction term, not
+the autoencoder alone, supplies the information the engineered features lack.
+
+\section{Discussion}
+
+\paragraph{\DIFdelbegin \DIFdel{Selecting an encoder is harder than training one}\DIFdelend \DIFaddbegin \DIFadd{Model selection must be gated on a held-out probe}\DIFaddend .} \DIFdelbegin \DIFdel{Our largest practical difficulty was
+not optimisationbut model selection}\DIFdelend \DIFaddbegin \DIFadd{Model selection, not optimisation, is
+where this pipeline is fragile}\DIFaddend . The reconstruction objective develops a localised artifact at the
+window boundary, and none of eleven interventions across four families of fix satisfied both
+pre-registered acceptance criteria, so the tapered variant shipped on the stated rule, not because it
+won. Underlying this is a
+measurement we think generalises. Across ten pre-training
+recipes, validation reconstruction \emph{anti}-predicts downstream probe score: the Spearman $\rho$
+between negated validation reconstruction and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks, the
+loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs $0.021$--$0.049$
+PR-AUC. The effect lives across recipes, not across seeds of one recipe, where no label-free metric we
+tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on
+its own objective and must be gated on a held-out probe.
+
+\paragraph{\DIFdelbegin \DIFdel{\textbf{Limitations.}}\DIFdelend \DIFaddbegin \DIFadd{\textbf{Limitations and next steps.}}\DIFaddend } \DIFdelbegin \DIFdel{Every comparison here is made under a linear readout,
+which is a
+choice rather than a concession: logistic regression over named axes is cheap, auditable, and stable
+enough that a change in the data appears in the coefficients rather than in the optimiser. We claim complementarity in that setting, not for readouts of arbitrary capacity}\DIFdelend \DIFaddbegin \DIFadd{The four linear-readout arms (\texttt{features},
+$\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
+parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
+is between feature sets. Our claim is made for a linear readout, and we make no claim about more
+powerful readouts}\DIFaddend . Our corpus is the bright ($T < 10$) two-minute sample, \DIFdelbegin \DIFdel{which is
+better studied and less confused than the faint population a survey-scale claim would need. Every armsees only each star's first segment ($\approx 5.7$\,d), which equalises access but bounds the supervised baselines at the probe's input scope rather than in general. Our
+labels come from incomplete catalogues, so a
+model-positive}\DIFdelend \DIFaddbegin \DIFadd{and every arm}\DIFaddend , \DIFdelbegin \DIFdel{catalogue-negative star scores as a false positive even when genuine. Rotation-period regression saturates at the 5.69}\DIFdelend \DIFaddbegin \DIFadd{the two
+supervised baselines included, sees one 5.7}\DIFaddend -day \DIFdelbegin \DIFdel{input
+baseline -- stars with true periods averaging 8.60 and 17.34 days are both answered near 5.6 -- so its
+$R^{2}$ is not period inference beyond the segment length. Flare is an activity label }\DIFdelend \DIFaddbegin \DIFadd{segment per star. The fainter and far more numerous
+stars, and longer light curves spanning several TESS sectors, are the obvious next experiments; the
+latter would let rotation periods longer than 5.7 days be measured, which one segment cannot do. Our
+negatives are stars absent from the label catalogues, not stars verified to lack the signal, so a
+correct detection the catalogue missed counts against us; every detection score is therefore a lower
+bound. The flare label marks stars that have flared somewhere in their TESS data}\DIFaddend , not a \DIFdelbegin \DIFdel{detection
+label: 81\% of labelled positives show no catalogued }\DIFdelend flare inside
+the \DIFdelbegin \DIFdel{encoded segment , so we claim
+flare propensity only; auditing its negative class against the detector's own published search cut
+moved the gain from $+0.0506$ to $+0.0507$. Under this frozen readout the advantage is also a
+large-label phenomenon, narrowing }\DIFdelend \DIFaddbegin \DIFadd{5.7-day segment we encode, so the task is recognising a flaring star, not finding a flare. When
+the readout is trained on one percent of the labels, the advantage narrows }\DIFaddend on 6 of 10 tasks\DIFdelbegin \DIFdel{as the labelled budget falls towards one percent}\DIFdelend \DIFaddbegin \DIFadd{, so how
+much pre-training helps when labels are scarce remains an open question}\DIFaddend .
+
+\paragraph{Reproducibility and disclosure.} \S2 gives the corpus cut, geometry, features, objective
+and readouts; the remaining sizes are four convolutional stages of width $32/64/128/256$, kernel 5,
+each halving length, a 128-dimensional Gaussian latent, and a single-layer GRU of width 256 across the
+16 windows. Splits are by star, drawn once, and shared byte-for-byte by every arm, including both
+supervised baselines, which reproduce the probe's star sets and test counts exactly. Code and score tables
+will be released on publication; generative AI assisted with analysis code and prose editing.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+
+\section{The two tasks where fusion does not help}
+\label{app:negatives}
+
+\begin{center}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+task & features & fusion $\Delta$ & $2\,\mathrm{SE}$ & untrained $\Delta$ & $n_{\mathrm{test}}$ \\
+\midrule
+oscillating giants & 0.920 & $-0.003$ & 0.002 & $-0.003$ & 3{,}429 \\
+RGB vs.\ He-burning & 0.758 & $-0.051$ & 0.019 & $-0.038$ & 161 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Oscillating giants: the engineered basis is already near-sufficient.} The labels of
+\citet{hon2021} come from a convolutional classifier reading a $128 \times 128$ image of each star's
+power spectrum, which fires on a visible oscillation power excess at
+$6 \lesssim \nu_{\max} \lesssim 250\,\mu$Hz. Our engineered vector encodes close to that same
+quantity: eight log-spaced band powers spanning 0.3--360\,c/d, plus the spectral centroid and
+entropy, locate the excess and describe its concentration. The features accordingly reach $0.920$,
+and the trained and untrained fusion arms then lose the same $0.003$ -- 128 collinear columns
+diluting a linear fit, with no trained-versus-untrained difference left to attribute to $\mu$.
+
+\paragraph{RGB versus helium-burning: no arm resolves the discriminant.} \citet{sreenivas2026} assign
+the evolutionary state with a convolutional classifier reading the background-corrected power spectrum
+\emph{folded at} $\Delta\nu$; the physics underneath is the dipole mixed-mode period spacing
+$\Delta\Pi_{1}$ \citep{bedding2011}. Neither is accessible at our baseline. The encoder sees one
+256-cadence window at a time, so the finest frequency structure available to $\mu$ is
+$\Delta f = 32.6\,\mu$Hz, while $\Delta\nu$ for these stars is $\approx 1.5$--$18\,\mu$Hz -- the comb
+itself is unresolved, let alone a fold of it. The engineered features, computed on the whole 5.69\,d
+segment, reach $2.0\,\mu$Hz, still coarser than the mixed-mode spacing
+$\Delta\Pi_{1}\nu^{2} \approx 0.2$--$0.6\,\mu$Hz near $\nu_{\max} = 50\,\mu$Hz. No arm on this row
+measures the quantity the label encodes; the $0.758$ the features reach rides on correlates of
+evolutionary state rather than on its discriminant. The row behaves accordingly: it is the only one
+where C2 ($0.762$) is ahead of the frozen probe while C1 reaches only $0.530$ on 755 training stars,
+and it carries the smallest test set in the study.
+
+\end{document}

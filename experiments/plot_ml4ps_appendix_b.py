@@ -153,29 +153,52 @@ def main() -> int:
 
     plt.rcParams.update({"font.size": 7, "axes.titlesize": 7, "axes.labelsize": 7, "legend.fontsize": 6,
                          "xtick.labelsize": 6, "ytick.labelsize": 6, "pdf.fonttype": 42})
-    fig, axes = plt.subplots(1, 4, figsize=(5.5, 1.35))
-    for ax, task in zip(axes, TASKS):
+    table09 = exp09_table()
+    stats09 = exp09_stats(table09)
+    table09.merge(stats09, on="task").to_csv(out_dir / "build" / "figB_exp09_data.csv", index=False)
+    kept09 = table09[~table09["void"]]
+
+    # Upper row: the exp05 comb sweep (dynamics-term axis). Lower row: the shipped hann0p3 family
+    # (auxiliary-term axis). Same x and y definitions; each row keeps its own axis ranges.
+    fig, axes = plt.subplots(2, 4, figsize=(5.5, 2.75))
+    for ax, task in zip(axes[0], TASKS):
         t = table[table["task"] == task]
         for _, r in t.iterrows():
             ax.scatter(r["val_recon_min"], r["pr_auc"], marker=MARKER[r["mode"]], s=16,
                        color="tab:red" if r["mode"] == "off" else "tab:blue", linewidths=0.5, zorder=3)
         s = stats[stats["task"] == task].iloc[0]
         ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_all_ten']:.2f}$", pad=3)
+    for ax, task in zip(axes[1], TASKS):
+        t = kept09[kept09["task"] == task]
+        for _, r in t.iterrows():
+            if r["cell"] == "exp09_aux_none":
+                style = dict(marker="D", color="tab:red", s=12)
+            elif r["cell"].endswith("_off"):
+                style = dict(marker="X", color="tab:red")
+            elif r["cell"] == "exp07_hann0p3_fbwd":
+                style = dict(marker="*", color="tab:blue", s=30)
+            else:
+                style = dict(marker="o", color="tab:blue")
+            ax.scatter(r["val_recon_min"], r["pr_auc"], s=style.pop("s", 16), linewidths=0.5, zorder=3, **style)
+        s = stats09[stats09["task"] == task].iloc[0]
+        ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_kept']:+.2f}$", pad=3)
+    for ax in axes.ravel():
         ax.tick_params(length=2, pad=1.5)
         ax.locator_params(axis="both", nbins=4)
-    axes[0].set_ylabel("probe PR-AUC on $\\mu$")
-    fig.supxlabel("best validation reconstruction loss (mean over four seeds)", y=-0.01)
+    axes[0][0].set_ylabel("PR-AUC on $\\mu$\n(a) exp05 sweep")
+    axes[1][0].set_ylabel("PR-AUC on $\\mu$\n(b) shipped family")
+    fig.supxlabel("best validation reconstruction loss (mean over seeds)", y=0.01)
     handles = [plt.Line2D([], [], marker=MARKER[m], color="tab:red" if m == "off" else "tab:blue",
-                          linestyle="", markersize=4, label=MODE_LABEL[m]) for m in MARKER]
-    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.20),
-               handletextpad=0.3, columnspacing=1.2)
-    fig.tight_layout(w_pad=0.6)
+                          linestyle="", markersize=4, label=MODE_LABEL[m] if m == "off" else f"(a) {MODE_LABEL[m]}")
+               for m in MARKER]
+    handles += [plt.Line2D([], [], marker="D", color="tab:red", linestyle="", markersize=3.5, label="(b) no auxiliary term"),
+                plt.Line2D([], [], marker="*", color="tab:blue", linestyle="", markersize=5, label="(b) shipped recipe"),
+                plt.Line2D([], [], marker="o", color="tab:blue", linestyle="", markersize=4, label="(b) other recipes")]
+    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.12),
+               handletextpad=0.3, columnspacing=1.0)
+    fig.tight_layout(w_pad=0.6, h_pad=0.8)
     fig.savefig(out_dir / "figures" / "figB_valloss.pdf", bbox_inches="tight")
     fig.savefig(out_dir / "build" / "figB_valloss.png", dpi=200, bbox_inches="tight")
-
-    table09 = exp09_table()
-    stats09 = exp09_stats(table09)
-    table09.merge(stats09, on="task").to_csv(out_dir / "build" / "figB_exp09_data.csv", index=False)
 
     with pd.option_context("display.width", 200, "display.float_format", "{:.3f}".format):
         print("exp05 comb family (the figure):")

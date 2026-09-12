@@ -44,7 +44,7 @@ $2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder does not. Against two ne
 end-to-end on the same labelled stars, splits and inputs, the frozen readout is ahead of a supervised
 Conv1D with the encoder's architecture on 6 of 10 tasks and indistinguishable on the other 4, and
 ahead of an MLP on raw flux on 9 of 10. \textbf{Self-supervision adds to engineered features rather
-than replacing them. Under a plain logistic regression, the combination matches or exceeds the two
+than replacing them. Under a frozen linear readout, the combination matches or exceeds the two
 supervised networks we train on the same 669 to 16{,}002 labelled stars per task.}
 \end{abstract}
 
@@ -55,31 +55,32 @@ Wide-field photometric surveys now produce light curves far faster than they can
 for hundreds of thousands of pre-selected stars, and full-frame images, now every 200\,s, for every
 star in the field. LSST \citep{ivezic2019} will enlarge the gap by orders of magnitude. Self-supervised learning is the
 natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
-each scientific question. This shape has recently been pursued for astronomical light curves by
-\citet{donoso2025astromer2}, \citet{zuo2025falco} and \citet{rui2026jepa}, and for TESS by
-\citet{poznanski2026}, who validates with embedding diagnostics rather than downstream tasks.
+each downstream task. Encoders of this shape exist for ground-based and Kepler light curves
+\citep{donoso2025astromer2,zuo2025falco,rui2026jepa} and for TESS \citep{poznanski2026}; they are
+validated by downstream accuracy on their own, or by the stability of the embedding itself, and none
+measures what the representation adds to the engineered features already in use.
 
 What makes this domain unusual is the strength of the incumbent it must improve on. Decades of variable-star
-research have distilled light curves into compact engineered summaries -- periodogram peak structure,
-band-limited power, spectral entropy, robust scatter statistics -- and pipelines built on them remain
+research have distilled light curves into compact engineered summaries: periodogram peak structure,
+band-limited power, spectral entropy and robust scatter statistics. Pipelines built on them remain
 highly competitive \citep{audenaert2021}. The benchmark of \citet{li2025staremb} makes the point
 sharply: across seven expert-labelled variable-star classes, no time-series foundation model they
 tested strictly surpassed the long-established domain feature baseline on classification. A learned
-representation for this data therefore has to answer a specific question, not a generic one: does it
+representation for this data therefore has to answer a specific question: does it
 carry information the engineered features do not already have?
 
-We take that question literally and measure it. We pre-train a latent-dynamics encoder on unlabelled
+We measure that directly. We pre-train a latent-dynamics encoder on unlabelled
 TESS photometry, freeze it, and ask what the features it learns add to a 25-feature engineered stack under an
-identical linear readout -- and whether the resulting pipeline, which trains no deep network at
-readout time, matches or exceeds two networks trained end-to-end on the same labels. Our
+identical linear readout, and whether the resulting pipeline, which trains only a linear model on
+the labels, matches or exceeds two networks trained end-to-end on the same labels. Our
 contributions are:
 
 \begin{itemize}
-\item \textbf{The learned features are complementary to the engineered ones, not a replacement for
-them.} Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
+\item \textbf{The learned features add to the engineered features rather than replacing them.}
+Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
 tasks, with the gains concentrated where the engineered basis is information-starved; an
 untrained-encoder control shows the effect is not generic column addition.
-\item \textbf{The combined pipeline, read out by logistic regression, matches or exceeds the two
+\item \textbf{The combined pipeline, read out by a frozen linear model, matches or exceeds the two
 supervised networks we train end-to-end on the same labels.} Against a supervised Conv1D with the
 encoder's architecture it is ahead on 6
 of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
@@ -92,7 +93,7 @@ than $T = 10$, one segment per star, drawn from Sectors 1--101; one cadence keep
 span of physical time. Each light curve is split into contiguous segments at runs of missing cadences and at time
 gaps exceeding five times the median cadence; segments are median-normalised by their median absolute
 deviation and sliced into non-overlapping windows of 256 cadences ($256 \times 120$\,s $\approx 8.5$\,h). Missing values
-are never interpolated or padded -- any window containing one is discarded, and segments are never
+are never interpolated or padded (any window containing one is discarded), and segments are never
 stitched across sector or gap boundaries. Pre-training consumes sequences of 16 consecutive windows
 ($\approx 5.69$\,d) and uses no labels of any kind.
 
@@ -178,15 +179,15 @@ Rotation is positive but just short of the
 bar ($+0.016$ against $0.016$). The two negative tasks are the ones where the engineered basis is
 already saturated or the probe is small: oscillating giants ($-0.003$, on a baseline of $0.920$) and
 RGB versus helium-burning ($-0.051$, 161 test stars). On both, an untrained-encoder control loses by an amount we cannot resolve from the trained
-fusion's -- the signature of extra collinear columns diluting a linear fit, not of $\mu$ carrying
+fusion's, the signature of extra collinear columns diluting a linear fit, not of $\mu$ carrying
 misleading content; Appendix~\ref{app:negatives} gives both rows in full. Across all ten tasks the untrained control is negative on seven
 and never exceeds $+0.016$, so the gains are specific to what pre-training learned. $\mu$ on its own
 does not replace the features: it is ahead on only 4 of 10 tasks alone, which is the same conclusion
 \citet{li2025staremb} reach for foundation-model embeddings, and is why we report fusion rather than
 substitution \citep{makinen2024}.
 
-\paragraph{The frozen pipeline matches or exceeds the two supervised networks.} Against C1 -- the same
-convolutional trunk, the same labels, the same input windows, trained end-to-end -- the frozen fusion
+\paragraph{The frozen pipeline matches or exceeds the two supervised networks.} Against C1, which shares
+the convolutional trunk, labels and input windows but is trained end-to-end, the frozen fusion
 probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
 (Figure~\ref{fig:deltas}b). Against
 C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
@@ -264,7 +265,7 @@ power spectrum, which fires on a visible oscillation power excess at
 $6 \lesssim \nu_{\max} \lesssim 250\,\mu$Hz. Our engineered vector encodes close to that same
 quantity: eight log-spaced band powers spanning 0.3--360\,c/d, plus the spectral centroid and
 entropy, locate the excess and describe its concentration. The features accordingly reach $0.920$,
-and the trained and untrained fusion arms then lose the same $0.003$ -- 128 collinear columns
+and the trained and untrained fusion arms then lose the same $0.003$: 128 collinear columns
 diluting a linear fit, with no trained-versus-untrained difference left to attribute to $\mu$.
 
 \paragraph{RGB versus helium-burning: no arm resolves the discriminant.} \citet{sreenivas2026} assign
@@ -272,7 +273,7 @@ the evolutionary state with a convolutional classifier reading the background-co
 \emph{folded at} $\Delta\nu$; the physics underneath is the dipole mixed-mode period spacing
 $\Delta\Pi_{1}$ \citep{bedding2011}. Neither is accessible at our baseline. The encoder sees one
 256-cadence window at a time, so the finest frequency structure available to $\mu$ is
-$\Delta f = 32.6\,\mu$Hz, while $\Delta\nu$ for these stars is $\approx 1.5$--$18\,\mu$Hz -- the comb
+$\Delta f = 32.6\,\mu$Hz, while $\Delta\nu$ for these stars is $\approx 1.5$--$18\,\mu$Hz; the comb
 itself is unresolved, let alone a fold of it. The engineered features, computed on the whole 5.69\,d
 segment, reach $2.0\,\mu$Hz, still coarser than the mixed-mode spacing
 $\Delta\Pi_{1}\nu^{2} \approx 0.2$--$0.6\,\mu$Hz near $\nu_{\max} = 50\,\mu$Hz. No arm on this row

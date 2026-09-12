@@ -51,9 +51,9 @@ supervised networks we train on the same 669 to 16{,}002 labelled stars per task
 \section{Introduction}
 
 Wide-field photometric surveys now produce light curves far faster than they can be labelled. TESS
-\citep{ricker2015} reads out hundreds of thousands of pre-selected stars at 2-minute cadence, its
-full-frame images, now every 200\,s, cover every star in the field, and LSST \citep{ivezic2019} will
-enlarge the gap by orders of magnitude. Self-supervised learning is the
+\citep{ricker2015} trades sampling rate against sky coverage: 2-minute (or 20-second) postage stamps
+for hundreds of thousands of pre-selected stars, and full-frame images, now every 200\,s, for every
+star in the field. LSST \citep{ivezic2019} will enlarge the gap by orders of magnitude. Self-supervised learning is the
 natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
 each scientific question. This shape has recently been pursued for astronomical light curves by
 \citet{donoso2025astromer2}, \citet{zuo2025falco} and \citet{rui2026jepa}, and for TESS by
@@ -287,28 +287,31 @@ and it carries the smallest test set in the study.
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figures/figB_valloss.pdf}
-\caption{One point per pre-training recipe (mean over its four seeds), one panel per task. The ten
-recipes share corpus, architecture and loss terms and differ only in the latent-dynamics term (off,
-forward, forward+backward, multi-step, the last three at three weights). $x$: best post-warm-up
-validation reconstruction loss; $y$: PR-AUC of the frozen linear probe on $\mu$; $\rho$: Spearman's
-between negated loss and score.}
+\caption{One point per pre-training recipe (mean over its seeds), one panel per task. (a) The
+exp05 sweep: ten recipes sharing corpus, architecture and loss terms, differing only in the
+latent-dynamics term (off, forward, forward+backward, multi-step, the last three at three weights),
+four seeds each. (b) The family the shipped encoder belongs to: 19 recipes on the final encoder that
+vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
+auxiliary term, the cross is the one dynamics-off recipe, the star is the shipped recipe. $x$: best
+post-warm-up validation reconstruction loss; $y$: PR-AUC of the frozen linear probe on $\mu$;
+$\rho$: Spearman's between negated loss and score.}
 \label{fig:valloss}
 \end{figure}
 
-Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph of \S4. The
-loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
+Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph of \S4. In row (a)
+the loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
 next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
 probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
-from $-0.43$ to $-0.87$. The recipes are an earlier sweep than the shipped encoder (they carry an
-earlier spectral auxiliary term), so we repeat the estimator on the family we ship: 19 recipes built
-on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each (two
-more recipes in which one seed collapsed are excluded; we never drop a seed). There the
+from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than the shipped encoder (they carry an
+earlier spectral auxiliary term), so row (b) repeats the estimator on the family we ship: 19 recipes
+built on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each
+(two more recipes in which one seed collapsed are excluded; we never drop a seed). There the
 anti-correlation does not persist as such: $\rho$ is $-0.51$ on pulsating and $-0.50$ on transit,
 $+0.37$ on eclipsing binaries and $+0.11$ on rotation. What persists is that the loss is not a
-selector: its optimum is again the recipe with the weakest competing term (no auxiliary term at all),
-which is never the probe optimum, and trusting it costs $0.011$--$0.034$ PR-AUC. So the figure shows
-an anti-correlation on every task in one family; in the shipped family it survives on two tasks and
-reverses on two; in neither does the loss choose. Both are statements across recipes only: within one recipe, across its seeds, no label-free
+selector: its optimum is again the recipe with the weakest competing term (the diamond, no auxiliary
+term at all), which is never the probe optimum, and trusting it costs $0.011$--$0.034$ PR-AUC. So
+row (a) shows an anti-correlation on every task; in row (b) it survives on two tasks and reverses on
+two; in neither does the loss choose. Both are statements across recipes only: within one recipe, across its seeds, no label-free
 curve metric we tried (reconstruction, reconstruction plus auxiliary, active latent units) ranks the
 seeds, every such correlation sitting within $\pm 0.3$ of zero.
 

@@ -45,11 +45,16 @@ MODE_LABEL = {"off": "dynamics off", "fwd": "forward", "fbwd": "forward+backward
 MARKER = {"off": "X", "fwd": "o", "fbwd": "s", "multi": "^"}
 
 
-def load_curve(cell: str, seed: int) -> pd.DataFrame:
+CURVES09 = repo_root / "experiments" / "exp09_forensics" / "curves_exp09"
+# Cells whose row the body's VOID rule drops: one seed collapsed, and no seed is ever dropped.
+VOID09 = {"exp09_dpss_impulse_w0p0125", "exp09_dpss_impulse_w0p02"}
+
+
+def load_curve(cell: str, seed: int, curves: Path = CURVES) -> pd.DataFrame:
     """One run's W&B history, with a killed-and-resumed prefix stitched in front when one exists."""
     stem = f"{cell}_B_seed{seed}"
-    main = pd.read_csv(CURVES / f"{stem}.csv")
-    prefix_path = CURVES / f"{stem}.killedprefix.csv"
+    main = pd.read_csv(curves / f"{stem}.csv")
+    prefix_path = curves / f"{stem}.killedprefix.csv"
     if prefix_path.exists():
         prefix = pd.read_csv(prefix_path)
         prefix = prefix[prefix["epoch"] < main["epoch"].min()]
@@ -79,6 +84,48 @@ def cell_table() -> pd.DataFrame:
                          "pr_auc": float(scores.mean()), "pr_auc_sd": float(scores.std(ddof=1)),
                          "n_seeds": len(SEEDS)})
     return pd.DataFrame(rows)
+
+
+def exp09_table() -> pd.DataFrame:
+    """The same estimator on the shipped family: every cell built on hann0p3 (the exp07 incumbent plus
+    every exp09 knob), from the exp09 probe summaries (pooling=mean, linear readout) and curves."""
+    files = sorted((repo_root / "experiments").glob("exp09_diag_*_probe_summary.csv"))
+    sc = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    sc = sc[(sc["pooling"] == "mean") & (sc["cell"] != "untrained_w256")]
+    # a cell scored in two summary files agrees to <= 0.008 PR-AUC per seed; average the duplicates
+    sc = sc.groupby(["cell", "seed", "task"], as_index=False)["pr_auc"].mean()
+    rows = []
+    for cell, g in sc.groupby("cell"):
+        seeds = sorted(int(s) for s in g["seed"].unique())
+        per_seed = []
+        for seed in seeds:
+            post = load_curve(cell, seed, CURVES09)
+            post = post[post["epoch"] >= WARMUP]
+            per_seed.append(float(post["val/recon"].min()))
+        for task in TASKS:
+            scores = g[g["task"] == task].set_index("seed").loc[seeds, "pr_auc"].to_numpy(dtype=float)
+            assert len(scores) == len(seeds), f"{cell}/{task}: {len(scores)} probe seeds vs {len(seeds)} curves"
+            rows.append({"cell": cell, "void": cell in VOID09, "task": task,
+                         "val_recon_min": float(np.mean(per_seed)), "val_recon_min_sd": float(np.std(per_seed, ddof=1)),
+                         "pr_auc": float(scores.mean()), "pr_auc_sd": float(scores.std(ddof=1)),
+                         "n_seeds": len(seeds)})
+    return pd.DataFrame(rows)
+
+
+def exp09_stats(table: pd.DataFrame) -> pd.DataFrame:
+    stats = []
+    for task in TASKS:
+        t = table[table["task"] == task]
+        kept = t[~t["void"]]
+        loss_pick = kept.loc[kept["val_recon_min"].idxmin()]
+        probe_pick = kept.loc[kept["pr_auc"].idxmax()]
+        stats.append({"task": task, "n_cells_all": len(t), "n_cells_kept": len(kept),
+                      "rho_all": float(spearmanr(-t["val_recon_min"], t["pr_auc"]).statistic),
+                      "rho_kept": float(spearmanr(-kept["val_recon_min"], kept["pr_auc"]).statistic),
+                      "p_kept": float(spearmanr(-kept["val_recon_min"], kept["pr_auc"]).pvalue),
+                      "loss_optimal_cell": loss_pick["cell"], "probe_optimal_cell": probe_pick["cell"],
+                      "cost_of_trusting_loss": float(probe_pick["pr_auc"] - loss_pick["pr_auc"])})
+    return pd.DataFrame(stats)
 
 
 def main() -> int:
@@ -126,8 +173,18 @@ def main() -> int:
     fig.savefig(out_dir / "figures" / "figB_valloss.pdf", bbox_inches="tight")
     fig.savefig(out_dir / "build" / "figB_valloss.png", dpi=200, bbox_inches="tight")
 
+    table09 = exp09_table()
+    stats09 = exp09_stats(table09)
+    table09.merge(stats09, on="task").to_csv(out_dir / "build" / "figB_exp09_data.csv", index=False)
+
     with pd.option_context("display.width", 200, "display.float_format", "{:.3f}".format):
+        print("exp05 comb family (the figure):")
         print(stats.to_string(index=False))
+        print("\nshipped hann0p3 family (exp07 incumbent + exp09 cells), same estimator:")
+        print(stats09.to_string(index=False))
+        print(table09.pivot(index="cell", columns="task", values="pr_auc")
+              .join(table09.groupby("cell")[["val_recon_min", "n_seeds", "void"]].first()).sort_values("val_recon_min")
+              .to_string())
     print(f"wrote {out_dir / 'figures' / 'figB_valloss.pdf'} and build/figB_{{valloss.png,data.csv}}")
     return 0
 

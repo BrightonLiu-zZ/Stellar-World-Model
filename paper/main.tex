@@ -37,7 +37,7 @@ Self-supervised models promise one representation, pre-trained once on unlabelle
 read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise has to
 improve on a strong, cheap incumbent: a few dozen engineered light-curve statistics. We pre-train a
 Conv1D variational encoder with a recurrent latent-dynamics model on 195{,}883 unlabelled TESS
-two-minute light curves, freeze it, and ask whether the features it learns add anything to 25
+2-minute light curves, freeze it, and ask whether the features it learns add anything to 25
 engineered features under one linear readout, on ten labelled tasks spanning variability
 classification, asteroseismology and rotation. Concatenating the two improves the readout beyond
 $2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder does not. Against two networks trained
@@ -51,8 +51,9 @@ supervised networks we train on the same 669 to 16{,}002 labelled stars per task
 \section{Introduction}
 
 Wide-field photometric surveys now produce light curves far faster than they can be labelled. TESS
-\citep{ricker2015} has observed hundreds of thousands of bright stars at two-minute cadence, and
-LSST \citep{ivezic2019} will enlarge the gap by orders of magnitude. Self-supervised learning is the
+\citep{ricker2015} reads out hundreds of thousands of pre-selected stars at 2-minute cadence, its
+full-frame images, now every 200\,s, cover every star in the field, and LSST \citep{ivezic2019} will
+enlarge the gap by orders of magnitude. Self-supervised learning is the
 natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
 each scientific question. This shape has recently been pursued for astronomical light curves by
 \citet{donoso2025astromer2}, \citet{zuo2025falco} and \citet{rui2026jepa}, and for TESS by
@@ -86,10 +87,11 @@ of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it 
 
 \section{Data and method}
 
-\paragraph{Data.} We use TESS two-minute SPOC PDCSAP photometry for 195{,}883 stars brighter than
-$T = 10$. Each light curve is split into contiguous segments at runs of missing cadences and at time
+\paragraph{Data.} We use the 2-minute SPOC PDCSAP target light curves of 195{,}883 stars brighter
+than $T = 10$, one segment per star, drawn from Sectors 1--101; one cadence keeps one window a fixed
+span of physical time. Each light curve is split into contiguous segments at runs of missing cadences and at time
 gaps exceeding five times the median cadence; segments are median-normalised by their median absolute
-deviation and sliced into non-overlapping windows of 256 cadences ($\approx 8.5$\,h). Missing values
+deviation and sliced into non-overlapping windows of 256 cadences ($256 \times 120$\,s $\approx 8.5$\,h). Missing values
 are never interpolated or padded -- any window containing one is discarded, and segments are never
 stitched across sector or gap boundaries. Pre-training consumes sequences of 16 consecutive windows
 ($\approx 5.69$\,d) and uses no labels of any kind.
@@ -190,15 +192,15 @@ probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
 C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
 stars). C1 is not weak: it clears the engineered arm on 5 of 10 and the $\mu$-only arm on 4, and on
 seven tasks the frozen probe recovers $0.98$--$1.09$ of its margin above the metric floor.
-This is a statement about what this architecture reaches on 669 to 16{,}002 labelled stars per task,
-not about supervision in general.
+This is a statement about this architecture on 669 to 16{,}002 labelled stars per task, not about
+supervision in general.
 
 \paragraph{The latent-dynamics term is what buys the complementarity.} Replacing the
 forward--backward dynamics objective with a dynamics-free variant, all else fixed and the same six
 seeds, reduces the fusion gain on all 10 tasks, and by more than $2\,\mathrm{SE}$ on 6 when the two
 arms are differenced seed by seed (Figure~\ref{fig:deltas}a, open triangles; largest losses solar-like
-oscillators $-0.047$, rotation $-0.026$, $\nu_{\max}$ $-0.025$). The recurrent prediction term, not
-the autoencoder alone, supplies the information the engineered features lack.
+oscillators $-0.047$, rotation $-0.026$, $\nu_{\max}$ $-0.025$). The prediction term, not the
+autoencoder alone, supplies what the engineered features lack.
 
 \section{Discussion}
 
@@ -209,18 +211,20 @@ so the tapered variant shipped on the stated rule, not because it won. Underlyin
 recipes of one sweep, validation reconstruction \emph{anti}-predicts downstream probe score: the
 Spearman $\rho$ between negated validation reconstruction and PR-AUC runs from $-0.58$ to $-0.84$ over
 four tasks, the loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs
-$0.021$--$0.049$ PR-AUC. The effect lives across recipes, not across seeds of one recipe, where no
-label-free metric we tried ranks anything. Self-supervised representation work in this domain therefore cannot be tuned on
-its own objective and must be gated on a held-out probe.
+$0.021$--$0.049$ PR-AUC. In the recipe family we ship the sign is mixed ($\rho$ from $-0.51$ to
+$+0.37$): there the loss does not predict the probe, and in neither family does it pick the
+probe-optimal recipe. Across seeds of one recipe no label-free metric we tried ranks anything.
+Self-supervised representation work here therefore cannot be tuned on its own objective and must be
+gated on a held-out probe.
 
 \paragraph{\textbf{Limitations and next steps.}} The four linear-readout arms (\texttt{features},
 $\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
 parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
 is between feature sets. Our claim is made for these 25 engineered features and a linear readout;
-we make no claim about other feature sets or more powerful readouts. Our corpus is the bright ($T < 10$) two-minute sample, and every arm, the two
+we make no claim about other feature sets or more powerful readouts. Our corpus is the bright ($T < 10$) 2-minute sample, and every arm, the two
 supervised baselines included, sees one 5.7-day segment per star. The fainter, far more numerous
-stars and light curves spanning several TESS sectors are the obvious next experiments; the latter
-would let rotation periods longer than 5.7 days be measured, which one segment cannot do. Our
+stars in the full-frame images, and light curves spanning several sectors (which would let rotation
+periods longer than 5.7 days be measured), are the obvious next experiments. Our
 negatives are stars absent from the label catalogues, not stars verified to lack the signal, so a
 correct detection the catalogue missed counts against us; every detection score is therefore a lower
 bound. The flare label marks stars that have flared somewhere in their TESS data, not a flare inside
@@ -231,7 +235,7 @@ much pre-training helps when labels are scarce remains an open question.
 \paragraph{Reproducibility and disclosure.} \S2 gives the corpus cut, geometry, features, objective
 and readouts; the encoder has four convolutional stages of width $32/64/128/256$ (kernel 5, each
 halving length), a 128-dimensional Gaussian latent and a single-layer GRU of width 256. Splits are by
-star, drawn once and shared byte-for-byte by every arm, the supervised baselines included. Code and
+star, drawn once and shared by every arm, the supervised baselines included. Code and
 score tables will be released on publication; generative AI assisted with analysis code and prose editing.
 
 \bibliographystyle{plainnat}
@@ -295,12 +299,18 @@ Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph
 loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
 next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
 probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
-from $-0.43$ to $-0.87$. Two limits on what the figure shows. The recipes are an earlier sweep than
-the shipped encoder (they carry an earlier spectral auxiliary term), so the figure establishes that
-the anti-correlation exists in this family, not its size for the final recipe. And it is a statement
-across recipes only: within one recipe, across its seeds, no label-free curve metric we tried
-(reconstruction, reconstruction plus auxiliary, active latent units) ranks the seeds, every such
-correlation sitting within $\pm 0.3$ of zero.
+from $-0.43$ to $-0.87$. The recipes are an earlier sweep than the shipped encoder (they carry an
+earlier spectral auxiliary term), so we repeat the estimator on the family we ship: 19 recipes built
+on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each (two
+more recipes in which one seed collapsed are excluded; we never drop a seed). There the
+anti-correlation does not persist as such: $\rho$ is $-0.51$ on pulsating and $-0.50$ on transit,
+$+0.37$ on eclipsing binaries and $+0.11$ on rotation. What persists is that the loss is not a
+selector: its optimum is again the recipe with the weakest competing term (no auxiliary term at all),
+which is never the probe optimum, and trusting it costs $0.011$--$0.034$ PR-AUC. So the figure shows
+an anti-correlation on every task in one family; in the shipped family it survives on two tasks and
+reverses on two; in neither does the loss choose. Both are statements across recipes only: within one recipe, across its seeds, no label-free
+curve metric we tried (reconstruction, reconstruction plus auxiliary, active latent units) ranks the
+seeds, every such correlation sitting within $\pm 0.3$ of zero.
 
 \section{Paired bootstrap over test stars}
 \label{app:bootstrap}
@@ -318,12 +328,13 @@ verdict becomes an interval that touches zero.
 
 \begin{table}[H]
 \centering
-\footnotesize
-\setlength{\tabcolsep}{3.5pt}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
 \input{tables/tableC_bootstrap.tex}
 \caption{Paired star-bootstrap of the four contrasts the body counts. Each entry is the 95\% interval
 of (left arm $-$ right arm) over 1{,}000 resamples of the test stars, seeds averaged, and the share of
-resamples with the difference above zero. Bold: interval excludes zero.}
+resamples with the difference above zero ($f_{>0}$; 1.00 means the left arm is ahead in every
+resample, 0.00 that it is behind in every resample). Bold: interval excludes zero.}
 \label{tab:bootstrap}
 \end{table}
 

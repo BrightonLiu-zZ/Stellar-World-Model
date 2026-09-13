@@ -44,10 +44,10 @@ Conv1D variational encoder with a recurrent latent-dynamics model on the unlabel
 engineered features under one linear readout, on ten labelled tasks spanning variability
 classification, asteroseismology and rotation. Concatenating the two improves the readout beyond
 $2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder does not. Against two networks trained
-end-to-end on the same labelled stars, splits and inputs, the frozen readout is ahead of a supervised
+end-to-end on the same labelled stars, splits and inputs, the combined readout is ahead of a supervised
 Conv1D with the encoder's architecture on 6 of 10 tasks and indistinguishable on the other 4, and
 ahead of an MLP on raw flux on 9 of 10. \textbf{Self-supervision adds to engineered features rather
-than replacing them. Under a frozen linear readout, the combination matches or exceeds the two
+than replacing them. Under a fixed linear readout, the combination matches or exceeds the two
 supervised networks we train on the same 669 to 16{,}002 labelled stars per task.}
 \end{abstract}
 
@@ -80,10 +80,10 @@ contributions are:
 
 \begin{itemize}
 \item \textbf{The learned features add to the engineered features rather than replacing them.}
-Concatenating the two improves a frozen linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
+Concatenating the two improves a fixed linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
 tasks, with the gains concentrated where the engineered basis is information-starved; an
 untrained-encoder control shows the effect is not generic column addition.
-\item \textbf{The combined pipeline, read out by a frozen linear model, matches or exceeds the two
+\item \textbf{The combined pipeline, read out by a fixed linear model, matches or exceeds the two
 supervised networks we train end-to-end on the same labels.} Against a supervised Conv1D with the
 encoder's architecture it is ahead on 6
 of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
@@ -123,9 +123,9 @@ it.
 window of its first segment (16 for 95\% of stars, 20 for the rest), of the per-window posterior
 means. The engineered baseline is a fixed 25-feature vector modelled on the T'DA variability pipeline
 \citep{audenaert2021}, computed from one periodogram and the flux distribution of the same first
-segment; Appendix~\ref{app:features} defines each feature. Readouts are deterministic and frozen,
-standardised on the training split alone: class-balanced $L_{2}$ logistic regression at a fixed
-$C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
+segment; Appendix~\ref{app:features} defines each feature. Readouts are fixed in advance and never
+tuned on a task, standardised on the training split alone: class-balanced $L_{2}$ logistic regression
+at $C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
 cross-validation (cross-validating $C$ changes no gain by more than $0.011$). We compare four
 arms, each the same readout on a different feature set: \texttt{features}, $\mu$,
 \texttt{features}\,$\oplus\,\mu$, and, as a control, the same fusion built on an \emph{untrained}
@@ -166,7 +166,7 @@ averaged; Appendix~\ref{app:bootstrap}) checks that no verdict hinges on the par
 \section{Results}
 
 \begin{table}[t]
-\caption{Ten-task scorecard. Linear-readout arms use a frozen logistic or ridge readout; the two
+\caption{Ten-task scorecard. Linear-readout arms use a fixed logistic or ridge readout; the two
 supervised arms are trained end-to-end per task. Bold marks a
 leader separated from the runner-up by the combined $2\,\mathrm{SE}$ band; italic marks a leader that
 is only the point-estimate argmax. $n$ is the test-star count and prev.\ the positive-class prevalence.}
@@ -180,34 +180,36 @@ is only the point-estimate argmax. $n$ is the test-star count and prev.\ the pos
 \centering
 \includegraphics[width=0.7\linewidth]{figures/fig1_deltas.pdf}
 \caption{The two claims. \textbf{(a)} What the learned features add to the engineered features under
-the same frozen linear readout, for the shipped encoder, its dynamics-free twin and an untrained
-control. \textbf{(b)} The frozen fusion probe against the two supervised baselines. Bars are
+the same fixed linear readout, for the shipped encoder, its dynamics-free twin and an untrained
+control. \textbf{(b)} The fusion probe against the two supervised baselines. Bars are
 $2\,\mathrm{SE}$; the untrained control is a single encoder and carries none.}
 \label{fig:deltas}
 \end{figure}
 
 \paragraph{The learned features add to the engineered features.} Table~\ref{tab:scorecard} and
 Figure~\ref{fig:deltas}a give the comparison. Concatenating $\mu$ with the 25 features improves the
-frozen readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
+fixed readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
 pulsating $+0.057$ and flare activity $+0.051$, and reaching $+0.013$ ($R^{2}$) on rotation period.
 Rotation is positive but just short of the
-bar ($+0.016$ against $0.016$). The two negative tasks are the ones where the engineered basis is
-already saturated or the labelled set is small: oscillating giants ($-0.003$, on a baseline of $0.920$) and
-RGB versus helium-burning ($-0.051$, 161 test stars). On both, an untrained-encoder control loses by an amount we cannot resolve from the trained
-fusion's, the signature of extra collinear columns diluting a linear fit, not of $\mu$ carrying
-misleading content; Appendix~\ref{app:negatives} gives both rows in full. Across all ten tasks the untrained control is negative on seven
-and never exceeds $+0.016$, so the gains are specific to what pre-training learned. $\mu$ on its own
-does not replace the features: it is ahead on only 4 of 10 tasks alone, which is the same conclusion
-\citet{li2025staremb} reach for foundation-model embeddings, and is why we report fusion rather than
-substitution \citep{makinen2024}.
+bar ($+0.016$ against $0.016$). The two negative tasks are the ones where 128 extra columns cost more
+than they add: the engineered basis is already saturated (oscillating giants, $-0.003$ on a baseline
+of $0.920$) or the training set is too small to pay for them (RGB versus helium-burning, $-0.051$ on
+755 training stars). On both, an untrained-encoder control loses by an amount we cannot resolve from
+the trained fusion's, the signature of collinear columns diluting a linear fit, not of $\mu$ carrying
+misleading content (Appendix~\ref{app:negatives}). Across all ten tasks the untrained control is
+negative on seven and never exceeds $+0.016$, so the gains are not what any 128 extra columns would
+buy on this feature set; they are specific to what pre-training learned. $\mu$ on its own does not
+replace the features: it is ahead on only 4 of 10 tasks alone, which is the conclusion
+\citet{li2025staremb} reach for frozen time-series foundation models, and is why we report fusion
+rather than substitution \citep{makinen2024}.
 
-\paragraph{The frozen pipeline matches or exceeds the two supervised networks.} Against C1, which shares
-the convolutional trunk, labels and input windows but is trained end-to-end, the frozen fusion
+\paragraph{The fusion probe matches or exceeds the two supervised networks.} Against C1, which shares
+the convolutional trunk, labels and input windows but is trained end-to-end, the fusion
 probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
 (Figure~\ref{fig:deltas}b). Against
 C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
 stars). C1 is not weak: it clears the engineered arm on 5 of 10 and the $\mu$-only arm on 4, and on
-seven tasks the frozen probe recovers $0.98$--$1.09$ of its margin above the metric floor.
+seven tasks the fusion probe recovers $0.98$--$1.09$ of its margin above the metric floor.
 A paired star-bootstrap (Appendix~\ref{app:bootstrap}) excludes zero on 5 of the 7 fusion gains, 5
 of the 6 leads over C1 and 7 of the 9 over C2; the rest stay ahead in at least 65\% of resamples
 and none changes sign.
@@ -293,7 +295,7 @@ segment, reach $2.0\,\mu$Hz, still coarser than the mixed-mode spacing
 $\Delta\Pi_{1}\nu^{2} \approx 0.2$--$0.6\,\mu$Hz near $\nu_{\max} = 50\,\mu$Hz. No arm on this row
 measures the quantity the label encodes; the $0.758$ the features reach rides on correlates of
 evolutionary state rather than on its discriminant. The row behaves accordingly: it is the only one
-where C2 ($0.762$) is ahead of the frozen probe while C1 reaches only $0.530$ on 755 training stars,
+where C2 ($0.762$) is ahead of the fusion probe while C1 reaches only $0.530$ on 755 training stars,
 and it carries the smallest test set in the study.
 
 \section{Validation reconstruction against downstream score}
@@ -308,7 +310,7 @@ latent-dynamics term (off, forward, forward+backward, multi-step, the last three
 four seeds each. (b) The family the shipped encoder belongs to: 19 recipes on the final encoder that
 vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
 auxiliary term, the cross is the one dynamics-off recipe, the star is the shipped recipe. $x$: best
-post-warm-up validation reconstruction loss; $y$: PR-AUC of the frozen linear probe on $\mu$;
+post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed linear probe on $\mu$;
 $\rho$: Spearman's between negated loss and score.}
 \label{fig:valloss}
 \end{figure}

@@ -36,19 +36,15 @@
 \maketitle
 
 \begin{abstract}
-Self-supervised models promise one representation, pre-trained once on unlabelled survey data and
-read out cheaply for many downstream tasks. In stellar time-domain astronomy that promise has to
-improve on a strong, cheap incumbent: a few dozen engineered light-curve statistics. We pre-train a
-Conv1D variational encoder with a recurrent latent-dynamics model on the unlabelled TESS
-2-minute light curves of 9{,}428 stars, freeze it, and ask whether the features it learns add anything to 25
-engineered features under one linear readout, on ten labelled tasks spanning variability
-classification, asteroseismology and rotation. Concatenating the two improves the readout beyond
-$2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder does not. Against two networks trained
-end-to-end on the same labelled stars, splits and inputs, the combined readout is ahead of a supervised
-Conv1D with the encoder's architecture on 6 of 10 tasks and indistinguishable on the other 4, and
-ahead of an MLP on raw flux on 9 of 10. \textbf{Self-supervision adds to engineered features rather
-than replacing them. Under a fixed linear readout, the combination matches or exceeds the two
-supervised networks we train on the same 669 to 16{,}002 labelled stars per task.}
+Self-supervised learning promises one encoder, pre-trained once and read out cheaply for many
+downstream tasks. We pre-train a Conv1D variational encoder with a GRU that predicts the
+neighbouring latent states on TESS light curves, freeze it, concatenate its features with 25
+engineered light-curve features, and read the combination out with one fixed linear probe on ten
+tasks spanning variability classification, asteroseismology and stellar rotation. Adding the
+learned features improves the readout on 7 of 10 tasks over the engineered features alone, while
+an untrained encoder does not. The combination also outperforms two networks trained end-to-end on
+the same labelled stars on most tasks. The learned features therefore complement the engineered
+features rather than replace them.
 \end{abstract}
 
 \section{Introduction}
@@ -61,30 +57,29 @@ natural response: pre-train one encoder on the unlabelled archive, then attach a
 each downstream task. Encoders of this shape exist for ground-based and Kepler light curves
 \citep{donoso2025astromer2,zuo2025falco,rui2026jepa} and for TESS \citep{poznanski2026}; they are
 validated by downstream accuracy on their own, or by the stability of the embedding itself, and none
-measures what the representation adds to the engineered features.
+measures what the learned features add to the engineered features.
 
-What makes this domain unusual is the strength of the incumbent it must improve on. Decades of variable-star
+What makes this domain unusual is that the baseline it must improve on is already strong. Decades of variable-star
 research have distilled light curves into compact engineered summaries: periodogram peak structure,
 band-limited power, spectral entropy and robust scatter statistics. Pipelines built on them remain
 highly competitive \citep{audenaert2021}. The benchmark of \citet{li2025staremb} makes the point
 sharply: across seven expert-labelled variable-star classes, no time-series foundation model they
 tested strictly surpassed the long-established domain feature baseline on classification. A learned
-representation for this data therefore has to answer a specific question: does it
-carry information the engineered features do not already have?
+encoder for this data therefore has to answer one question: do its features carry information the
+engineered features do not already have?
 
-We measure that directly. We pre-train a latent-dynamics encoder on unlabelled
-TESS photometry, freeze it, and ask what the features it learns add to a 25-feature engineered stack under an
-identical linear readout, and whether the resulting pipeline, which trains only a linear model on
-the labels, matches or exceeds two networks trained end-to-end on the same labels. Our
-contributions are:
+We measure that directly. We pre-train an encoder on TESS light curves, freeze it, and add its
+features to the 25 engineered features under one fixed linear readout. We ask two things: what the
+learned features add, and whether the combination, which trains only a linear model on the labels,
+outperforms two networks trained end-to-end on the same labels. Our contributions are:
 
 \begin{itemize}
 \item \textbf{The learned features add to the engineered features rather than replacing them.}
-Concatenating the two improves a fixed linear readout beyond $2\,\mathrm{SE}$ on 7 of 10
-tasks, with the gains concentrated where the engineered basis is information-starved; an
-untrained-encoder control shows the effect is not generic column addition.
-\item \textbf{The combined pipeline, read out by a fixed linear model, matches or exceeds the two
-supervised networks we train end-to-end on the same labels.} Against a supervised Conv1D with the
+Adding the learned features to the engineered ones improves a fixed linear readout beyond
+$2\,\mathrm{SE}$ on 7 of 10 tasks, with the gains largest where the engineered features are weakest;
+an untrained encoder gives no such gain, so the effect is not just 128 more columns.
+\item \textbf{The combined pipeline, read out by a fixed linear model, outperforms the two
+supervised networks we train end-to-end on the same labels on most tasks.} Against a supervised Conv1D with the
 encoder's architecture it is ahead on 6
 of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
 \end{itemize}
@@ -159,7 +154,7 @@ initialisation and shuffling seeds (six); the engineered arm is
 deterministic. A $\mu$-arm seed indexes a separate pre-training run and a C1 or C2 seed only an
 initialisation, so seed $k$ of one has nothing in common with seed $k$ of the other; such differences
 are treated as unpaired and their bands combined as $\sqrt{\mathrm{SE}_a^{2}+\mathrm{SE}_b^{2}}$.
-A difference counts as resolved only when it exceeds the combined $2\,\mathrm{SE}$ band. These bands
+A difference counts only when it exceeds the combined $2\,\mathrm{SE}$ band. These bands
 measure re-training spread only; a paired bootstrap over the test stars (1{,}000 resamples, seeds
 averaged; Appendix~\ref{app:bootstrap}) checks that no verdict hinges on the particular test stars.
 
@@ -180,44 +175,44 @@ is only the point-estimate argmax. $n$ is the test-star count and prev.\ the pos
 \centering
 \includegraphics[width=0.7\linewidth]{figures/fig1_deltas.pdf}
 \caption{The two claims. \textbf{(a)} What the learned features add to the engineered features under
-the same fixed linear readout, for the shipped encoder, its dynamics-free twin and an untrained
+the same fixed linear readout, for our encoder, its dynamics-free twin and an untrained
 control. \textbf{(b)} The fusion probe against the two supervised baselines. Bars are
 $2\,\mathrm{SE}$; the untrained control is a single encoder and carries none.}
 \label{fig:deltas}
 \end{figure}
 
 \paragraph{The learned features add to the engineered features.} Table~\ref{tab:scorecard} and
-Figure~\ref{fig:deltas}a give the comparison. Concatenating $\mu$ with the 25 features improves the
+Figure~\ref{fig:deltas}a give the comparison. Adding $\mu$ to the 25 features improves the
 fixed readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
 pulsating $+0.057$ and flare activity $+0.051$, and reaching $+0.013$ ($R^{2}$) on rotation period.
 Rotation is positive but just short of the
 bar ($+0.016$ against $0.016$). The two negative tasks are the ones where 128 extra columns cost more
-than they add: the engineered basis is already saturated (oscillating giants, $-0.003$ on a baseline
+than they add: the 25 features already cover the task (oscillating giants, $-0.003$ on a baseline
 of $0.920$) or the training set is too small to pay for them (RGB versus helium-burning, $-0.051$ on
-755 training stars). On both, an untrained-encoder control loses by an amount we cannot resolve from
-the trained fusion's, the signature of collinear columns diluting a linear fit, not of $\mu$ carrying
-misleading content (Appendix~\ref{app:negatives}). Across all ten tasks the untrained control is
+755 training stars). On both, an untrained encoder loses by about the same amount as the trained
+fusion, within the error band; that is what redundant columns do to a linear fit, not a sign that
+$\mu$ carries misleading content (Appendix~\ref{app:negatives}). Across all ten tasks the untrained control is
 negative on seven and never exceeds $+0.016$, so the gains are not what any 128 extra columns would
 buy on this feature set; they are specific to what pre-training learned. $\mu$ on its own does not
 replace the features: it is ahead on only 4 of 10 tasks alone, which is the conclusion
 \citet{li2025staremb} reach for frozen time-series foundation models, and is why we report fusion
 rather than substitution \citep{makinen2024}.
 
-\paragraph{The fusion probe matches or exceeds the two supervised networks.} Against C1, which shares
+\paragraph{The fusion probe outperforms the two supervised networks on most tasks.} Against C1, which shares
 the convolutional trunk, labels and input windows but is trained end-to-end, the fusion
 probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
 (Figure~\ref{fig:deltas}b). Against
 C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
 stars). C1 is not weak: it clears the engineered arm on 5 of 10 and the $\mu$-only arm on 4, and on
-seven tasks the fusion probe recovers $0.98$--$1.09$ of its margin above the metric floor.
+seven tasks the fusion probe reaches $0.98$--$1.09$ of C1's score above the metric's floor.
 A paired star-bootstrap (Appendix~\ref{app:bootstrap}) excludes zero on 5 of the 7 fusion gains, 5
 of the 6 leads over C1 and 7 of the 9 over C2; the rest stay ahead in at least 65\% of resamples
 and none changes sign.
 This is a statement about this architecture on 669 to 16{,}002 labelled stars per task, not about
 supervision in general.
 
-\paragraph{The latent-dynamics term is what buys the complementarity.} Replacing the
-forward--backward dynamics objective with a dynamics-free variant, all else fixed and the same six
+\paragraph{The GRU prediction term is what makes the learned features complementary.} Removing the
+GRU prediction term, all else fixed and the same six
 seeds, reduces the fusion gain on all 10 tasks, and by more than $2\,\mathrm{SE}$ on 6 when the two
 arms are differenced seed by seed (Figure~\ref{fig:deltas}a, open triangles; largest losses solar-like
 oscillators $-0.047$, rotation $-0.026$, $\nu_{\max}$ $-0.025$). The prediction term, not the
@@ -225,17 +220,17 @@ autoencoder alone, supplies what the engineered features lack.
 
 \section{Discussion}
 
-\paragraph{Model selection must be gated on a held-out probe.} The reconstruction objective develops a localised artifact at the
+\paragraph{Pick the encoder by a held-out probe, not by its loss.} The reconstruction objective develops a localised artifact at the
 window boundary, and none of eleven interventions satisfied both pre-registered acceptance criteria,
-so the tapered variant shipped on the stated rule, not because it won. Underlying this is one
+so the tapered variant is the one we use because it met the pre-registered rule, not because it won. Underlying this is one
 measurement (Appendix~\ref{app:valloss}): across ten pre-training recipes of one sweep, validation reconstruction \emph{anti}-predicts downstream probe score: the
 Spearman $\rho$ between negated validation reconstruction and PR-AUC runs from $-0.58$ to $-0.84$ over
 four tasks, the loss-optimal recipe is the dynamics-free one on all four, and trusting the loss costs
 $0.021$--$0.049$ PR-AUC. In the recipe family we ship the sign is mixed ($\rho$ from $-0.51$ to
 $+0.37$): there the loss does not predict the probe, and in neither family does it pick the
 probe-optimal recipe. Across seeds of one recipe no label-free metric we tried ranks anything.
-Self-supervised representation work here therefore cannot be tuned on its own objective and must be
-gated on a held-out probe.
+A self-supervised encoder here therefore cannot be chosen by its own loss; it has to be chosen by a
+held-out probe.
 
 \paragraph{\textbf{Limitations and next steps.}} The four linear-readout arms (\texttt{features},
 $\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
@@ -275,7 +270,7 @@ RGB vs.\ He-burning & 0.758 & $-0.051$ & 0.019 & $-0.038$ & 161 \\
 \end{tabular}
 \end{center}
 
-\paragraph{Oscillating giants: the engineered basis is already near-sufficient.} The labels of
+\paragraph{Oscillating giants: the 25 features already cover the task.} The labels of
 \citet{hon2021} come from a convolutional classifier reading a $128 \times 128$ image of each star's
 power spectrum, which fires on a visible oscillation power excess at
 $6 \lesssim \nu_{\max} \lesssim 250\,\mu$Hz. Our engineered vector encodes close to that same
@@ -306,10 +301,10 @@ and it carries the smallest test set in the study.
 \includegraphics[width=\linewidth]{figures/figB_valloss.pdf}
 \caption{One point per pre-training recipe (mean over its seeds), one panel per task. (a) The
 exp05 sweep: ten recipes sharing corpus, architecture and loss terms, differing only in the
-latent-dynamics term (off, forward, forward+backward, multi-step, the last three at three weights),
-four seeds each. (b) The family the shipped encoder belongs to: 19 recipes on the final encoder that
+GRU prediction term (off, forward, forward+backward, multi-step, the last three at three weights),
+four seeds each. (b) The family our encoder belongs to: 19 recipes on the final encoder that
 vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
-auxiliary term, the cross is the one dynamics-off recipe, the star is the shipped recipe. $x$: best
+auxiliary term, the cross is the one dynamics-off recipe, the star is the recipe we use. $x$: best
 post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed linear probe on $\mu$;
 $\rho$: Spearman's between negated loss and score.}
 \label{fig:valloss}
@@ -319,7 +314,7 @@ Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph
 the loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
 next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
 probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
-from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than the shipped encoder (they carry an
+from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than our encoder (they carry an
 earlier spectral auxiliary term), so row (b) repeats the estimator on the family we ship: 19 recipes
 built on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each
 (two more recipes in which one seed collapsed are excluded; we never drop a seed). There the

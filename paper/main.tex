@@ -36,20 +36,26 @@
 \maketitle
 
 \begin{abstract}
-Self-supervised learning promises one encoder, pre-trained once and read out cheaply for many
-downstream tasks. We pre-train a Conv1D variational encoder with a GRU that predicts the
-neighbouring latent states on TESS light curves, freeze it, concatenate its features with 25
-engineered light-curve features, and read the combination out with one fixed linear probe on ten
-tasks spanning variability classification, asteroseismology and stellar rotation. Adding the
-learned features improves the readout on 7 of 10 tasks over the engineered features alone, while
-an untrained encoder does not. The combination also outperforms two networks trained end-to-end on
-the same labelled stars on most tasks. The learned features therefore complement the engineered
-features rather than replace them.
+TESS light curves encode a star's pulsation, rotation, binarity and oscillations, but the survey
+produces far more light curves than can be labelled by hand. Decades of work have distilled these
+light curves into a few dozen engineered features that remain hard to beat, and the learned encoders
+built for light curves so far have been validated on their own, so whether they carry anything the
+engineered features lack is unknown. We pre-train a convolutional encoder on unlabelled TESS light
+curves to predict each window's latent representation from those of its neighbours, freeze it, add
+its features to the 25 engineered features, and read the combination out with one fixed linear probe
+on ten tasks spanning variability, asteroseismology and rotation. Adding the learned features
+improves the readout on 7 of 10 tasks over the engineered features alone, while an untrained encoder
+does not. The combination also outperforms two networks trained end-to-end on the same labelled
+stars on most tasks. The learned features therefore complement the engineered features rather than
+replace them: an encoder trained without labels gives astronomers new features to put beside the
+ones they already use.
 \end{abstract}
 
 \section{Introduction}
 
-Wide-field photometric surveys now produce light curves far faster than they can be labelled. TESS
+A star's light curve carries its pulsation, rotation, eclipses and oscillations, and with them its
+age, interior and companions. Wide-field photometric surveys now produce light curves far faster
+than they can be labelled. TESS
 \citep{ricker2015} trades sampling rate against sky coverage: 2-minute (or 20-second) postage stamps
 for hundreds of thousands of pre-selected stars, and full-frame images, now every 200\,s, for every
 star in the field. LSST \citep{ivezic2019} will enlarge the gap by orders of magnitude. Self-supervised learning is the

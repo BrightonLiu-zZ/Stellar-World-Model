@@ -38,9 +38,9 @@
 \begin{abstract}
 TESS light curves encode a star's pulsation, rotation, binarity and oscillations, but the survey
 produces far more light curves than can be labelled by hand. Astronomers have distilled these light
-curves into a few dozen engineered features that remain hard to beat. Learned encoders for light
-curves have so far been validated on their own, so whether they carry anything those features lack
-is unknown. We pre-train a convolutional encoder on unlabelled TESS light curves to predict each
+curves into a few dozen engineered features that remain hard to beat. Previous work has trained
+encoders on light curves and judged them by their own downstream scores, but has not asked whether
+they carry anything the engineered features lack. We pre-train a convolutional encoder on unlabelled TESS light curves to predict each
 window's latent representation from those of its neighbours. We then freeze it, add its features to
 the 25 engineered features, and read the combination out with one fixed linear probe on ten tasks
 spanning variability, asteroseismology and rotation. Adding the learned features

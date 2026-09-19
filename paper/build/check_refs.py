@@ -43,6 +43,8 @@ cited_ids = {
     "guerrero2021": "2103.12538",
     # Added 2026-09-07 with Appendix A: the physical discriminant behind the rgb_vs_heb labels.
     "bedding2011": "1103.5805",
+    # Added 2026-09-18: the extended-mission cadences (20 s light curves, 10 min FFIs) in the intro.
+    "huber2022": "2108.09109",
 }
 
 # Kept so the report records HOW the two ids above were found, not because anything is outstanding.

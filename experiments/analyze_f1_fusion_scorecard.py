@@ -92,7 +92,9 @@ ARM_SETS = ("features_only", "mu", "features_plus_mu", "mu_perp_full")
 # content, so the missing cell is (features (+) mu) under the SAME nonlinear readout. Reported as a
 # control beside the linear headline, never replacing it -- the same status D18 grants C3's arm 7, and
 # it does not touch the v1 headline probe on mu that CLAUDE.md's linear-probe lock governs.
-FAMILIES = {"linear": ("logistic", "ridge"), "gbm": ("gbm", "gbm"), "mlp": ("mlp", "mlp")}
+FAMILIES = {"linear": ("logistic", "ridge"), "gbm": ("gbm", "gbm"), "mlp": ("mlp", "mlp"),
+            # wave-3 (2026-09-16): Yue Ma's named estimator, grid + early stopping in swm.eval.xgb_readout
+            "xgb": ("xgb", "xgb")}
 # Residualisation is a linear operation defined against a linear readout; running `mu_perp_full` under
 # a tree ensemble would answer a question nobody asked, and `mean_perp_amp` likewise. The nonlinear
 # families therefore score only the three arm sets the control actually needs.

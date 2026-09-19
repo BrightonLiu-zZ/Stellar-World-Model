@@ -155,6 +155,9 @@ def fit_readout_scores(readout: str, x_train: np.ndarray, y_train: np.ndarray, x
         clf = HistGradientBoostingClassifier(class_weight="balanced", random_state=random_state) # boosted trees
         clf.fit(x_train, y_train)
         return clf.predict_proba(x_test)[:, 1]
+    if readout == "xgb":
+        from swm.eval.xgb_readout import xgb_predict  # optional dependency; imported only when asked for
+        return xgb_predict("classify", x_train, y_train, x_test, random_state)
     if readout == "mlp":
         scaler = StandardScaler()
         x_tr = scaler.fit_transform(x_train)

@@ -102,6 +102,9 @@ def score_regression(x_train, y_train, x_test, y_test, regressor: str = "ridge",
         reg = HistGradientBoostingRegressor(random_state=random_state)
         reg.fit(x_train, y_train)  # trees are scale-invariant, no standardization
         pred = reg.predict(x_test)
+    elif regressor == "xgb":
+        from swm.eval.xgb_readout import xgb_predict  # optional dependency; imported only when asked for
+        pred = xgb_predict("regress", x_train, y_train, x_test, random_state)
     elif regressor == "mlp":
         scaler = StandardScaler()
         reg = MLPRegressor(hidden_layer_sizes=(64,), max_iter=1000, early_stopping=True,

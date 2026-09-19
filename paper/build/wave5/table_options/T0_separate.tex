@@ -1,0 +1,52 @@
+\documentclass{article}
+\usepackage{neurips_2026}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,amsmath,amssymb}
+\pagestyle{empty}
+\begin{document}
+\noindent\rule{\linewidth}{0.4pt}\par\noindent{\tiny the rule above is the paper's text width}
+\begin{table}[h]\caption{Table 1 (body). Unchanged.}
+\centering\scriptsize
+\begin{tabular}{llrrrrrr}
+\toprule
+ & & & \multicolumn{3}{c}{frozen linear readout} & \multicolumn{2}{c}{end-to-end supervised} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-8}
+task & metric & $n$ (prev.) & features & $\mu$ & features\,$\oplus$\,$\mu$ & Conv1D & MLP \\
+\midrule
+pulsating & PR-AUC & 2021 (0.107) & 0.789 & 0.806 & \textbf{0.846} & 0.816 & 0.748 \\
+eclipsing binary & PR-AUC & 2021 (0.097) & 0.742 & 0.771 & \textit{0.775} & 0.774 & 0.719 \\
+rotation & PR-AUC & 2021 (0.089) & 0.540 & 0.559 & 0.555 & \textit{0.565} & 0.526 \\
+transit & PR-AUC & 2021 (0.060) & 0.190 & 0.144 & \textbf{0.218} & 0.134 & 0.109 \\
+oscillating giant & PR-AUC & 3429 (0.383) & \textbf{0.920} & 0.854 & 0.918 & 0.875 & 0.883 \\
+solar-like osc. & PR-AUC & 3429 (0.122) & 0.320 & 0.336 & 0.390 & \textit{0.396} & 0.275 \\
+RGB vs. HeB & ROC-AUC & 161 (0.702) & 0.758 & 0.660 & 0.708 & 0.530 & \textbf{0.762} \\
+$\nu_{\max}$ & $R^2$ & 1313 & 0.831 & 0.802 & \textbf{0.867} & 0.832 & 0.834 \\
+rotation period & $R^2$ & 150 & 0.703 & 0.677 & \textbf{0.717} & 0.597 & 0.698 \\
+flare activity & PR-AUC & 3429 (0.089) & 0.474 & 0.453 & 0.524 & \textit{0.533} & 0.444 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[h]\caption{Appendix B table. Bold = gain beyond $2\,\mathrm{SE}$.}
+\centering\scriptsize
+\begin{tabular}{llrrrrrr}
+\toprule
+ & & \multicolumn{3}{c}{linear readout} & \multicolumn{3}{c}{XGBoost readout} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+task & metric & features & $+\mu$ & $+$untrained $\mu$ & features & $+\mu$ & $+$untrained $\mu$ \\
+\midrule
+pulsating & PR-AUC & 0.789 & $\mathbf{+0.057}$ & $+0.016$ & 0.845 & $-0.011$ & $-0.003$ \\
+eclipsing binary & PR-AUC & 0.742 & $\mathbf{+0.033}$ & $-0.010$ & 0.798 & $\mathbf{+0.010}$ & $-0.003$ \\
+rotation & PR-AUC & 0.540 & $+0.016$ & $-0.026$ & 0.596 & $\mathbf{-0.020}$ & $-0.034$ \\
+transit & PR-AUC & 0.190 & $\mathbf{+0.027}$ & $+0.004$ & 0.217 & $+0.011$ & $-0.027$ \\
+oscillating giant & PR-AUC & 0.920 & $\mathbf{-0.003}$ & $-0.003$ & 0.924 & $-0.001$ & $-0.008$ \\
+solar-like osc. & PR-AUC & 0.320 & $\mathbf{+0.071}$ & $-0.007$ & 0.470 & $-0.007$ & $-0.026$ \\
+RGB vs. HeB & ROC-AUC & 0.758 & $\mathbf{-0.050}$ & $-0.038$ & 0.746 & $\mathbf{+0.016}$ & $-0.031$ \\
+$\nu_{\max}$ & $R^2$ & 0.831 & $\mathbf{+0.036}$ & $-0.001$ & 0.916 & $\mathbf{+0.003}$ & $-0.005$ \\
+rotation period & $R^2$ & 0.703 & $\mathbf{+0.013}$ & $-0.057$ & 0.695 & $\mathbf{+0.036}$ & $-0.004$ \\
+flare activity & PR-AUC & 0.474 & $\mathbf{+0.051}$ & $+0.006$ & 0.562 & $+0.003$ & $+0.006$ \\
+\midrule
+win / tie / loss & & \multicolumn{3}{c}{7 / 1 / 2} & \multicolumn{3}{c}{4 / 5 / 1} \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

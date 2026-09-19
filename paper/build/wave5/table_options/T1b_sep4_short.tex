@@ -1,0 +1,30 @@
+\documentclass{article}
+\usepackage{neurips_2026}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,amsmath,amssymb}
+\pagestyle{empty}
+\begin{document}
+\noindent\rule{\linewidth}{0.4pt}\par\noindent{\tiny the rule above is the paper's text width}
+\begin{table}[h]\caption{Ten-task scorecard. Bold marks the best of the three arms under each frozen readout; the two supervised arms are trained end-to-end per task.}
+\centering\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llrrrrrrrrr}
+\toprule
+ & & & \multicolumn{3}{c}{frozen linear readout} & \multicolumn{3}{c}{frozen XGBoost readout} & \multicolumn{2}{c}{end-to-end supervised} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-11}
+task & metric & $n$ (prev.) & feat. & $\mu$ & feat.\,$\oplus$\,$\mu$ & feat. & $\mu$ & feat.\,$\oplus$\,$\mu$ & Conv1D & MLP \\
+\midrule
+pulsating & PR-AUC & 2021 (0.107) & 0.789 & 0.806 & \textbf{0.846} & \textbf{0.845} & 0.821 & 0.834 & 0.816 & 0.748 \\
+eclipsing binary & PR-AUC & 2021 (0.097) & 0.742 & 0.771 & \textbf{0.775} & 0.798 & 0.789 & \textbf{0.807} & 0.774 & 0.719 \\
+rotation & PR-AUC & 2021 (0.089) & 0.540 & \textbf{0.559} & 0.555 & \textbf{0.596} & 0.544 & 0.576 & 0.565 & 0.526 \\
+transit & PR-AUC & 2021 (0.060) & 0.190 & 0.144 & \textbf{0.218} & 0.217 & 0.223 & \textbf{0.228} & 0.134 & 0.109 \\
+oscillating giant & PR-AUC & 3429 (0.383) & \textbf{0.920} & 0.854 & 0.918 & \textbf{0.924} & 0.899 & 0.923 & 0.875 & 0.883 \\
+solar-like osc. & PR-AUC & 3429 (0.122) & 0.320 & 0.336 & \textbf{0.390} & \textbf{0.470} & 0.409 & 0.463 & 0.396 & 0.275 \\
+RGB vs. HeB & ROC-AUC & 161 (0.702) & \textbf{0.758} & 0.660 & 0.708 & 0.746 & 0.725 & \textbf{0.763} & 0.530 & 0.762 \\
+$\nu_{\max}$ & $R^2$ & 1313 & 0.831 & 0.802 & \textbf{0.867} & 0.916 & 0.831 & \textbf{0.919} & 0.832 & 0.834 \\
+rotation period & $R^2$ & 150 & 0.703 & 0.677 & \textbf{0.717} & 0.695 & 0.655 & \textbf{0.730} & 0.597 & 0.698 \\
+flare activity & PR-AUC & 3429 (0.089) & 0.474 & 0.453 & \textbf{0.524} & 0.562 & 0.485 & \textbf{0.565} & 0.533 & 0.444 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

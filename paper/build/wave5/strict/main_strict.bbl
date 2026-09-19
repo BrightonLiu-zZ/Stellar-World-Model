@@ -1,0 +1,158 @@
+\begin{thebibliography}{21}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Audenaert et~al.(2021)Audenaert, Kuszlewicz, Handberg,
+  et~al.]{audenaert2021}
+Jeroen Audenaert, James~S. Kuszlewicz, Rasmus Handberg, et~al.
+\newblock {TESS} data for asteroseismology ({T'DA}) stellar variability
+  classification pipeline: Set-up and application to the {Kepler} {Q9} data.
+\newblock \emph{The Astronomical Journal}, 162\penalty0 (5):\penalty0 209,
+  2021.
+\newblock arXiv:2107.06301.
+
+\bibitem[Bedding et~al.(2011)Bedding, Mosser, Huber, et~al.]{bedding2011}
+Timothy~R. Bedding, Benoit Mosser, Daniel Huber, et~al.
+\newblock Gravity modes as a way to distinguish between hydrogen- and
+  helium-burning red giant stars.
+\newblock \emph{Nature}, 471:\penalty0 608, 2011.
+\newblock arXiv:1103.5805.
+
+\bibitem[Boyle et~al.(2026)Boyle, Bouma, and Mann]{boyle2026}
+Andrew~W. Boyle, Luke~G. Bouma, and Andrew~W. Mann.
+\newblock The {TESS} all-sky rotation survey: Periods for 1,046,317 stars
+  within 500 pc.
+\newblock \emph{arXiv e-prints}, 2026.
+\newblock arXiv:2603.05586.
+
+\bibitem[Cho et~al.(2014)Cho, van Merri\"{e}nboer, Gulcehre, et~al.]{cho2014}
+Kyunghyun Cho, Bart van Merri\"{e}nboer, Caglar Gulcehre, et~al.
+\newblock Learning phrase representations using {RNN} encoder--decoder for
+  statistical machine translation.
+\newblock In \emph{Conference on Empirical Methods in Natural Language
+  Processing}, 2014.
+\newblock arXiv:1406.1078.
+
+\bibitem[Donoso-Oliva et~al.(2025)Donoso-Oliva, Becker, Protopapas,
+  et~al.]{donoso2025astromer2}
+Cristobal Donoso-Oliva, Ignacio Becker, Pavlos Protopapas, et~al.
+\newblock {Astromer} 2.
+\newblock \emph{arXiv e-prints}, 2025.
+\newblock arXiv:2502.02717.
+
+\bibitem[Gao et~al.(2025)Gao, Chen, Wang, and Liu]{gao2025}
+Xinyi Gao, Xiaodian Chen, Shu Wang, and Licai Liu.
+\newblock Classification of periodic variable stars from {TESS}.
+\newblock \emph{The Astrophysical Journal Supplement Series}, 276\penalty0
+  (2):\penalty0 57, 2025.
+\newblock arXiv:2412.06175.
+
+\bibitem[Guerrero et~al.(2021)Guerrero, Seager, Huang, et~al.]{guerrero2021}
+Natalia~M. Guerrero, Sara Seager, Chelsea~X. Huang, et~al.
+\newblock The {TESS} objects of interest catalog from the {TESS} prime mission.
+\newblock \emph{The Astrophysical Journal Supplement Series}, 254\penalty0
+  (2):\penalty0 39, 2021.
+\newblock arXiv:2103.12538.
+
+\bibitem[Hatt et~al.(2023)Hatt, Nielsen, Chaplin, et~al.]{hatt2023}
+Emily Hatt, Martin~B. Nielsen, William~J. Chaplin, et~al.
+\newblock A catalogue of solar-like oscillators observed by {TESS} in
+  120-second and 20-second cadence.
+\newblock \emph{Astronomy \& Astrophysics}, 669:\penalty0 A67, 2023.
+\newblock arXiv:2210.09109.
+
+\bibitem[Hon et~al.(2021)Hon, Huber, Kuszlewicz, et~al.]{hon2021}
+Marc Hon, Daniel Huber, James~S. Kuszlewicz, et~al.
+\newblock A `quick look' at all-sky galactic archeology with {TESS}: 158,000
+  oscillating red giants from the {MIT} quick-look pipeline.
+\newblock \emph{The Astrophysical Journal}, 919\penalty0 (2):\penalty0 131,
+  2021.
+\newblock arXiv:2108.01241.
+
+\bibitem[Ivezi\'{c} et~al.(2019)Ivezi\'{c}, Kahn, Tyson, et~al.]{ivezic2019}
+\v{Z}eljko Ivezi\'{c}, Steven~M. Kahn, J.~Anthony Tyson, et~al.
+\newblock {LSST}: From science drivers to reference design and anticipated data
+  products.
+\newblock \emph{The Astrophysical Journal}, 873\penalty0 (2):\penalty0 111,
+  2019.
+\newblock arXiv:0805.2366.
+
+\bibitem[Kingma and Welling(2014)]{kingma2014}
+Diederik~P. Kingma and Max Welling.
+\newblock Auto-encoding variational bayes.
+\newblock In \emph{International Conference on Learning Representations}, 2014.
+\newblock arXiv:1312.6114.
+
+\bibitem[Li et~al.(2025)Li, Chen, Rehemtulla, et~al.]{li2025staremb}
+Weijian Li, Hong-Yu Chen, Nabeel Rehemtulla, et~al.
+\newblock {StarEmbed}: Benchmarking time series foundation models on
+  astronomical observations of variable stars.
+\newblock \emph{arXiv e-prints}, 2025.
+\newblock arXiv:2510.06200.
+
+\bibitem[Makinen et~al.(2024)Makinen, Sui, Wandelt, et~al.]{makinen2024}
+T.~Lucas Makinen, Ce~Sui, Benjamin~D. Wandelt, et~al.
+\newblock Hybrid summary statistics.
+\newblock \emph{arXiv e-prints}, 2024.
+\newblock arXiv:2410.07548.
+
+\bibitem[Poznanski(2026)]{poznanski2026}
+Dovi Poznanski.
+\newblock A useful representation of {TESS} light curves.
+\newblock \emph{arXiv e-prints}, 2026.
+\newblock arXiv:2605.05324.
+
+\bibitem[Pr\v{s}a et~al.(2022)Pr\v{s}a, Kochoska, Conroy, et~al.]{prsa2022}
+Andrej Pr\v{s}a, Angela Kochoska, Kyle~E. Conroy, et~al.
+\newblock {TESS} eclipsing binary stars. {I}. short-cadence observations of
+  4584 eclipsing binaries in sectors 1--26.
+\newblock \emph{The Astrophysical Journal Supplement Series}, 258\penalty0
+  (1):\penalty0 16, 2022.
+\newblock arXiv:2110.13382.
+
+\bibitem[Ricker et~al.(2015)Ricker, Winn, Vanderspek, et~al.]{ricker2015}
+George~R. Ricker, Joshua~N. Winn, Roland Vanderspek, et~al.
+\newblock The transiting exoplanet survey satellite.
+\newblock \emph{Journal of Astronomical Telescopes, Instruments, and Systems},
+  1\penalty0 (1):\penalty0 014003, 2015.
+\newblock arXiv:1406.0151.
+
+\bibitem[Rui(2026)]{rui2026jepa}
+Yicheng Rui.
+\newblock Domain-informed multi-view self-distillation for astronomical
+  light-curve representation learning with {JEPA}.
+\newblock \emph{arXiv e-prints}, 2026.
+\newblock arXiv:2606.28446.
+
+\bibitem[Seli et~al.(2025)Seli, Vida, Ol\'{a}h, et~al.]{seli2025}
+B\'{a}lint Seli, Kriszti\'{a}n Vida, Katalin Ol\'{a}h, et~al.
+\newblock Stellar flare morphology with {TESS} across the main sequence.
+\newblock \emph{Astronomy \& Astrophysics}, 2025.
+\newblock arXiv:2412.12989.
+
+\bibitem[Sreenivas et~al.(2026)]{sreenivas2026}
+K.~R. Sreenivas et~al.
+\newblock Global asteroseismology of 19,000 red giants in the {TESS} continuous
+  viewing zones.
+\newblock \emph{arXiv e-prints}, 2026.
+\newblock arXiv:2604.00498.
+
+\bibitem[Vida et~al.(2021)Vida, B\'{o}di, Szkl\'{e}n\'{a}r, and Seli]{vida2021}
+Kriszti\'{a}n Vida, Attila B\'{o}di, Tam\'{a}s Szkl\'{e}n\'{a}r, and B\'{a}lint
+  Seli.
+\newblock Finding flares in {Kepler} and {TESS} data with recurrent deep neural
+  networks.
+\newblock \emph{Astronomy \& Astrophysics}, 652:\penalty0 A107, 2021.
+\newblock arXiv:2105.11485.
+
+\bibitem[Zuo et~al.(2025)Zuo, Tao, Huang, et~al.]{zuo2025falco}
+Xiaoxiong Zuo, Yihan Tao, Yang Huang, et~al.
+\newblock {FALCO}: A foundation model of astronomical light curves for
+  time-domain astronomy.
+\newblock \emph{arXiv e-prints}, 2025.
+\newblock arXiv:2504.20290.
+
+\end{thebibliography}

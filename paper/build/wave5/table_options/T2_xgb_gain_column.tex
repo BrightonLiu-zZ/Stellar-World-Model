@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage{neurips_2026}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs,amsmath,amssymb}
+\pagestyle{empty}
+\begin{document}
+\noindent\rule{\linewidth}{0.4pt}\par\noindent{\tiny the rule above is the paper's text width}
+\begin{table}[h]\caption{Table 1 (body). One column added: the $\mu$ gain under XGBoost, bold beyond $2\,\mathrm{SE}$.}
+\centering\scriptsize
+\begin{tabular}{llrrrrrrr}
+\toprule
+ & & & \multicolumn{3}{c}{frozen linear readout} & \multicolumn{2}{c}{end-to-end supervised} & XGBoost \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+task & metric & $n$ (prev.) & features & $\mu$ & features\,$\oplus$\,$\mu$ & Conv1D & MLP & $\mu$ gain \\
+\midrule
+pulsating & PR-AUC & 2021 (0.107) & 0.789 & 0.806 & \textbf{0.846} & 0.816 & 0.748 & $-0.011$ \\
+eclipsing binary & PR-AUC & 2021 (0.097) & 0.742 & 0.771 & \textit{0.775} & 0.774 & 0.719 & $\mathbf{+0.010}$ \\
+rotation & PR-AUC & 2021 (0.089) & 0.540 & 0.559 & 0.555 & \textit{0.565} & 0.526 & $\mathbf{-0.020}$ \\
+transit & PR-AUC & 2021 (0.060) & 0.190 & 0.144 & \textbf{0.218} & 0.134 & 0.109 & $+0.011$ \\
+oscillating giant & PR-AUC & 3429 (0.383) & \textbf{0.920} & 0.854 & 0.918 & 0.875 & 0.883 & $-0.001$ \\
+solar-like osc. & PR-AUC & 3429 (0.122) & 0.320 & 0.336 & 0.390 & \textit{0.396} & 0.275 & $-0.007$ \\
+RGB vs. HeB & ROC-AUC & 161 (0.702) & 0.758 & 0.660 & 0.708 & 0.530 & \textbf{0.762} & $\mathbf{+0.016}$ \\
+$\nu_{\max}$ & $R^2$ & 1313 & 0.831 & 0.802 & \textbf{0.867} & 0.832 & 0.834 & $\mathbf{+0.003}$ \\
+rotation period & $R^2$ & 150 & 0.703 & 0.677 & \textbf{0.717} & 0.597 & 0.698 & $\mathbf{+0.036}$ \\
+flare activity & PR-AUC & 3429 (0.089) & 0.474 & 0.453 & 0.524 & \textit{0.533} & 0.444 & $+0.003$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}

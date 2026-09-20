@@ -59,7 +59,30 @@ sed 's#figures/fig1_deltas.pdf#build/fig1_deltas.png#' main.tex > build/main_doc
 pandoc build/main_docx.tex --citeproc --bibliography=refs.bib --resource-path=.:build -o build/draft.docx
 ```
 
-## Venue constraints this build satisfies
+## What this build now targets: arXiv, not the workshop
+
+Since 2026-09-20 `main.tex` builds the **arXiv version**, not the ML4PS submission. The submitted
+file is frozen in `build/submitted_ml4ps_2026/` and that copy, not this one, is what the constraints
+below described. Two preamble changes made the switch (roadmap 2.2 and 2.4):
+
+- `\usepackage[preprint]{neurips_2026}` replaces the hand-written `\@noticestring` override. The
+  style file's own `preprint` option sets the footer to "Preprint.", turns anonymity off (so the
+  `\author` block prints and the line numbers disappear) and un-hides the `ack` environment. The
+  style file itself stays unmodified.
+- The three float-spacing overrides (`\abovecaptionskip` / `\textfloatsep` / `\floatsep`) are gone.
+  They existed only to buy ~4 lines for the 4-page limit, which arXiv does not impose.
+
+**The page-4 assertion is retired.** `build_and_check.sh` still prints the page-4/5 boundary, but a
+body that runs past page 4 is no longer a defect — read those two lines as information, not as a
+test. The checks that still matter are the overfull-box count and reading the PDF end to end.
+
+Measured after the switch (2026-09-20): 10 pages, 0 overfull boxes, body still ends on page 4 and
+References still opens page 5. Dropping the float overrides did *not* spill the body, because
+`preprint` also removes the submission line numbers and gives the lines back.
+
+## Venue constraints the *submitted* version satisfied
+
+Kept for the record; they describe `build/submitted_ml4ps_2026/main.pdf`.
 
 - 4 pages excluding references: body ends on page 4, references run pages 5-6, Appendices A-B on page 6,
   C on page 7, D-E on page 8, F on pages 9-10 (2026-09-18).
@@ -73,12 +96,15 @@ pandoc build/main_docx.tex --citeproc --bibliography=refs.bib --resource-path=.:
 - Fully anonymized; no code link (optional at this venue for the Research track, verified against the 2026 guidelines page). Replication is served by a text recipe in §4 plus the sizes given there, not by a repository.
 - Generative-AI use disclosed, as the guidelines require.
 
-## Page budget
+## Page budget (historical, applied to the submitted version)
 
 The body ends on page 4 at line 156 (2026-09-19); the slack was not measured, assume none: References opens page 5 at line 157. The intro's first paragraph must stay at 9 lines: at 10, Figure 1 floats to page 4 and the body spills two lines. Any addition longer than that needs a matching cut, and
 `pdftotext -layout -f 5 -l 5 main.pdf -` is the check (its first non-blank line must be "References") — the page count alone does not tell you whether
 the body spilled, because the references occupy two pages either way. This has already bitten once:
 hand edits on 2026-09-07 pushed two lines onto page 5 while the page count stayed at 6.
+
+None of this binds the arXiv build. It binds a future camera-ready, should ML4PS accept the paper on
+2026-10-10, which would be built from the frozen copy plus the reviewer fixes.
 
 ## Overleaf
 

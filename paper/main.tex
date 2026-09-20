@@ -36,14 +36,15 @@
 \maketitle
 
 \begin{abstract}
-TESS light curves encode a star's pulsation, rotation, binarity and oscillations, but the survey
+TESS light curves encode a star's pulsation, rotation, binarity and oscillations, among other physical
+properties, but the survey
 produces far more light curves than can be labelled by hand. Astronomers have engineered a few
-dozen physically motivated features from these light curves, which together remain a strong baseline. Previous work has trained
+dozen physically motivated features from them, which together remain a strong baseline. Previous work has trained
 encoders on light curves and judged them by their own downstream scores, but has not asked what
 they add to the engineered features. We pre-train a convolutional encoder on unlabelled TESS light curves to predict each
 window's latent representation from those of its neighbours. We then freeze it, add its features to
-the 25 engineered features, and read the combination out with one fixed linear probe on ten tasks
-spanning variability, asteroseismology and rotation. Adding the learned features
+the 25 engineered features, and read the combination out with one fixed linear probe on ten tasks:
+five variability classes, four asteroseismic targets and rotation period. Adding the learned features
 improves the readout on 7 of 10 tasks over the engineered features alone, while an untrained encoder
 does not. The combination also outperforms two networks trained end-to-end on the same labelled
 stars on most tasks. An encoder trained without labels therefore gives astronomers new features
@@ -53,13 +54,14 @@ that complement the ones they already use rather than replace them.
 \section{Introduction}
 
 A star's light curve carries its pulsation, rotation, eclipses and oscillations, and with them its
-age, interior and companions. Wide-field photometric surveys now produce light curves far faster
+age, interior and companions. Wide-field surveys now produce light curves far faster
 than they can be labelled. TESS
-\citep{ricker2015} trades sampling rate against sky coverage: 2-minute (or 20-second) light curves
-for hundreds of thousands of pre-selected stars, and full-frame images, every 30 or 10 minutes, for
-every star in the field \citep{huber2022}. LSST \citep{ivezic2019} will widen the gap. Self-supervised learning is the
+\citep{ricker2015} returns 2-minute or 20-second \citep{huber2022} light curves for hundreds of
+thousands of pre-selected stars, and full-frame images of every star in the field at cadences that
+change between mission cycles (30 minutes, then 10, now 200 seconds). LSST \citep{ivezic2019}
+will add \emph{billions} more light curves, albeit at a cadence of days. Self-supervised learning is the
 natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
-each downstream task. Encoders of this shape exist for ground-based, Gaia and Kepler light curves
+each task. Encoders of this shape exist for ground-based, Gaia and Kepler light curves
 \citep{donoso2025astromer2,zuo2025falco,rui2026jepa} and are evaluated by classification accuracy,
 sometimes against engineered features \citep{rui2026jepa}; a label-free TESS representation
 \citep{poznanski2026} is evaluated by whether repeat observations of one star lie close in its embedding space.
@@ -222,7 +224,7 @@ than half on 5 of the 8 tasks where fusion gains.
 one sweep, a lower validation reconstruction loss went with a \emph{lower} probe score: the Spearman
 $\rho$ between negated loss and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks. The recipe with the
 lowest loss is the one without the prediction term on all four, and choosing it would cost
-$0.021$--$0.049$ PR-AUC (Appendix~\ref{app:valloss}). A self-supervised encoder here therefore has to be
+$0.021$--$0.049$ PR-AUC (Appendix~\ref{app:valloss}). An encoder here therefore has to be
 chosen by a held-out probe, not by its own loss.
 
 \paragraph{\textbf{Limitations and next steps.}} \emph{Readout.} The four linear-readout arms (\texttt{features},
@@ -238,7 +240,7 @@ negatives are stars absent from the label catalogues, not stars verified to lack
 catalogue incompleteness adds positive-unlabelled label noise and the detection scores may be
 conservative. The flare label marks stars that have flared somewhere in their TESS data, not a flare inside
 the 5.7-day segment we encode, so the task is recognising a flaring star, not finding a flare. \emph{Label scarcity.} When
-the readout is trained on one percent of the labels, the advantage narrows on 6 of 10 tasks, so how
+the readout is trained on a few percent of the labels, the advantage narrows on 7 of 10 tasks, so how
 much pre-training helps when labels are scarce remains open. \emph{Discovery.} Every task here has a
 catalogue; whether $\mu$ also separates kinds of variability that no catalogue labels yet, for instance
 as clusters in the latent space, is untested.
@@ -341,7 +343,7 @@ four seeds each. (b) The family our encoder belongs to: 19 recipes on the final 
 vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
 auxiliary term, the cross is the one dynamics-off recipe, the star is the recipe we use. $x$: best
 post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed linear probe on $\mu$;
-$\rho$: Spearman's between negated loss and score.}
+$\rho$: Spearman's rank correlation between negated loss and score.}
 \label{fig:valloss}
 \end{figure}
 

@@ -364,7 +364,8 @@ def plot_deltas(scorecard: pd.DataFrame, out_path: Path, png_path: Path,
     # latent-dynamics term removed, and an untrained encoder. Stacking them here rather than in a
     # second table is what lets the dynamics claim in Results be read off a figure we already print.
     left = axes[0]
-    linear_offset = 0.24 if xgb_gain is None else 0.16
+    pair_offset = 0.11 # half the gap between the two points of a row; small enough that a pair stays inside its band
+    linear_offset = 0.24 if xgb_gain is None else pair_offset
     left.errorbar(
         scorecard["d_features"],
         positions + linear_offset,
@@ -402,7 +403,7 @@ def plot_deltas(scorecard: pd.DataFrame, out_path: Path, png_path: Path,
         assert list(xgb_gain["task"]) == list(scorecard["task"])
         left.errorbar(
             xgb_gain["delta_mean"],
-            positions - 0.16,
+            positions - pair_offset,
             xerr=xgb_gain["delta_2se"],
             fmt="o",
             markersize=3.5,
@@ -419,7 +420,7 @@ def plot_deltas(scorecard: pd.DataFrame, out_path: Path, png_path: Path,
     right = axes[1]
     right.errorbar(
         scorecard["d_c1"],
-        positions + 0.16,
+        positions + pair_offset,
         xerr=scorecard["d_c1_2se"],
         fmt="o",
         markersize=3.5,
@@ -430,7 +431,7 @@ def plot_deltas(scorecard: pd.DataFrame, out_path: Path, png_path: Path,
     )
     right.errorbar(
         scorecard["d_c2"],
-        positions - 0.16,
+        positions - pair_offset,
         xerr=scorecard["d_c2_2se"],
         fmt="s",
         markersize=3.2,
@@ -445,6 +446,14 @@ def plot_deltas(scorecard: pd.DataFrame, out_path: Path, png_path: Path,
     handles = []
     legend_labels = []
     for axis in axes:
+        # Alternate rows shaded (Prof. Theissen, 2026-09-19): each band holds the two offset points of
+        # one task, and a faint dotted line runs through each row between its two points, so a pair
+        # traces back to its label. Heavier dashed lines were tried and crowded the plot.
+        for position in positions:
+            if position % 2 == 0:
+                axis.axhspan(position - 0.5, position + 0.5, color="#000000", alpha=0.06, linewidth=0, zorder=0)
+            axis.axhline(position, color="#bbbbbb", linewidth=0.35, linestyle=(0, (1, 3)), zorder=0)
+        axis.set_ylim(positions.min() - 0.5, positions.max() + 0.5)
         axis.axvline(0, color="black", linewidth=0.7)
         axis.set_yticks(positions)
         axis.set_yticklabels(labels)

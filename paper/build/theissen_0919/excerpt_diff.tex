@@ -1,0 +1,172 @@
+\documentclass{article}
+%DIF LATEXDIFF DIFFERENCE FILE
+%DIF DEL build/theissen_0919/main_before.tex   Sat Sep 19 16:46:43 2026
+%DIF ADD main.tex                              Sat Sep 19 17:37:20 2026
+
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}   % \lesssim in Appendix A; amsmath alone does not define it
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{float}     % [H] for the Appendix C figure, so it stays with its paragraph
+\setlength{\abovecaptionskip}{4pt}   % float spacing tightened to hold the body on four pages
+\setlength{\textfloatsep}{10pt}
+\setlength{\floatsep}{8pt}
+
+% The workshop prescribes the first-page footer text. The style file is otherwise untouched.
+\makeatletter
+\renewcommand{\@noticestring}{%
+  Submitted to the 9th Workshop on Machine Learning and the Physical Sciences (ML4PS 2026).
+  Do not distribute.%
+}
+\makeatother
+
+\title{What does self-supervision add to engineered features\\for stellar light curves?}
+
+\author{Anonymous Author(s)\\Affiliation\\Address\\\texttt{email}}
+
+ %DIF > 
+%DIF PREAMBLE EXTENSION ADDED BY LATEXDIFF
+%DIF UNDERLINE PREAMBLE %DIF PREAMBLE
+\RequirePackage[normalem]{ulem} %DIF PREAMBLE
+\RequirePackage{color}\definecolor{RED}{rgb}{1,0,0}\definecolor{BLUE}{rgb}{0,0,1} %DIF PREAMBLE
+\providecommand{\DIFaddtex}[1]{{\protect\color{blue}\uwave{#1}}} %DIF PREAMBLE
+\providecommand{\DIFdeltex}[1]{{\protect\color{red}\sout{#1}}} %DIF PREAMBLE
+%DIF SAFE PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFaddbegin}{} %DIF PREAMBLE
+\providecommand{\DIFaddend}{} %DIF PREAMBLE
+\providecommand{\DIFdelbegin}{} %DIF PREAMBLE
+\providecommand{\DIFdelend}{} %DIF PREAMBLE
+\providecommand{\DIFmodbegin}{} %DIF PREAMBLE
+\providecommand{\DIFmodend}{} %DIF PREAMBLE
+%DIF FLOATSAFE PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFaddFL}[1]{\DIFadd{#1}} %DIF PREAMBLE
+\providecommand{\DIFdelFL}[1]{\DIFdel{#1}} %DIF PREAMBLE
+\providecommand{\DIFaddbeginFL}{} %DIF PREAMBLE
+\providecommand{\DIFaddendFL}{} %DIF PREAMBLE
+\providecommand{\DIFdelbeginFL}{} %DIF PREAMBLE
+\providecommand{\DIFdelendFL}{} %DIF PREAMBLE
+%DIF HYPERREF PREAMBLE %DIF PREAMBLE
+\providecommand{\DIFadd}[1]{\texorpdfstring{\DIFaddtex{#1}}{#1}} %DIF PREAMBLE
+\providecommand{\DIFdel}[1]{\texorpdfstring{\DIFdeltex{#1}}{}} %DIF PREAMBLE
+\providecommand{\DIFscaledelfig}{0.5}
+%DIF HIGHLIGHTGRAPHICS PREAMBLE %DIF PREAMBLE
+\RequirePackage{settobox} %DIF PREAMBLE
+\RequirePackage{letltxmacro} %DIF PREAMBLE
+\newsavebox{\DIFdelgraphicsbox} %DIF PREAMBLE
+\newlength{\DIFdelgraphicswidth} %DIF PREAMBLE
+\newlength{\DIFdelgraphicsheight} %DIF PREAMBLE
+% store original definition of \includegraphics %DIF PREAMBLE
+\LetLtxMacro{\DIFOincludegraphics}{\includegraphics} %DIF PREAMBLE
+\providecommand{\DIFaddincludegraphics}[2][]{{\color{blue}\fbox{\DIFOincludegraphics[#1]{#2}}}} %DIF PREAMBLE
+\providecommand{\DIFdelincludegraphics}[2][]{% %DIF PREAMBLE
+\sbox{\DIFdelgraphicsbox}{\DIFOincludegraphics[#1]{#2}}% %DIF PREAMBLE
+\settoboxwidth{\DIFdelgraphicswidth}{\DIFdelgraphicsbox} %DIF PREAMBLE
+\settoboxtotalheight{\DIFdelgraphicsheight}{\DIFdelgraphicsbox} %DIF PREAMBLE
+\scalebox{\DIFscaledelfig}{% %DIF PREAMBLE
+\parbox[b]{\DIFdelgraphicswidth}{\usebox{\DIFdelgraphicsbox}\\[-\baselineskip] \rule{\DIFdelgraphicswidth}{0em}}\llap{\resizebox{\DIFdelgraphicswidth}{\DIFdelgraphicsheight}{% %DIF PREAMBLE
+\setlength{\unitlength}{\DIFdelgraphicswidth}% %DIF PREAMBLE
+\begin{picture}(1,1)% %DIF PREAMBLE
+\thicklines\linethickness{2pt} %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,0){\framebox(1,1){}}}% %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,0){\line( 1,1){1}}}% %DIF PREAMBLE
+{\color[rgb]{1,0,0}\put(0,1){\line(1,-1){1}}}% %DIF PREAMBLE
+\end{picture}% %DIF PREAMBLE
+}\hspace*{3pt}}} %DIF PREAMBLE
+} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddbegin}{\DIFaddbegin} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddend}{\DIFaddend} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelbegin}{\DIFdelbegin} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelend}{\DIFdelend} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddbegin}{\DIFOaddbegin \let\includegraphics\DIFaddincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddend}{\DIFOaddend \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelbegin}{\DIFOdelbegin \let\includegraphics\DIFdelincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelend}{\DIFOaddend \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddbeginFL}{\DIFaddbeginFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOaddendFL}{\DIFaddendFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelbeginFL}{\DIFdelbeginFL} %DIF PREAMBLE
+\LetLtxMacro{\DIFOdelendFL}{\DIFdelendFL} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddbeginFL}{\DIFOaddbeginFL \let\includegraphics\DIFaddincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFaddendFL}{\DIFOaddendFL \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelbeginFL}{\DIFOdelbeginFL \let\includegraphics\DIFdelincludegraphics} %DIF PREAMBLE
+\DeclareRobustCommand{\DIFdelendFL}{\DIFOaddendFL \let\includegraphics\DIFOincludegraphics} %DIF PREAMBLE
+%DIF AMSMATHULEM PREAMBLE %DIF PREAMBLE
+\makeatletter %DIF PREAMBLE
+\let\sout@orig\sout %DIF PREAMBLE
+\renewcommand{\sout}[1]{\ifmmode\text{\sout@orig{\ensuremath{#1}}}\else\sout@orig{#1}\fi} %DIF PREAMBLE
+\makeatother %DIF PREAMBLE
+%DIF COLORLISTINGS PREAMBLE %DIF PREAMBLE
+\RequirePackage{listings} %DIF PREAMBLE
+\RequirePackage{color} %DIF PREAMBLE
+\lstdefinelanguage{DIFcode}{ %DIF PREAMBLE
+%DIF DIFCODE_UNDERLINE %DIF PREAMBLE
+  moredelim=[il][\color{red}\sout]{\%DIF\ <\ }, %DIF PREAMBLE
+  moredelim=[il][\color{blue}\uwave]{\%DIF\ >\ } %DIF PREAMBLE
+} %DIF PREAMBLE
+\lstdefinestyle{DIFverbatimstyle}{ %DIF PREAMBLE
+	language=DIFcode, %DIF PREAMBLE
+	basicstyle=\ttfamily, %DIF PREAMBLE
+	columns=fullflexible, %DIF PREAMBLE
+	keepspaces=true %DIF PREAMBLE
+} %DIF PREAMBLE
+\lstnewenvironment{DIFverbatim}[1][]{\lstset{style=DIFverbatimstyle}}{} %DIF PREAMBLE
+\lstnewenvironment{DIFverbatim*}[1][]{\lstset{style=DIFverbatimstyle,showspaces=true}}{} %DIF PREAMBLE
+\lstset{extendedchars=\true,inputencoding=utf8}
+
+%DIF END PREAMBLE EXTENSION ADDED BY LATEXDIFF
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+TESS light curves encode a star's pulsation, rotation, binarity and oscillations, \DIFaddbegin \DIFadd{among other physical
+properties, }\DIFaddend but the survey
+produces far more light curves than can be labelled by hand. Astronomers have engineered a few
+dozen physically motivated features from \DIFdelbegin \DIFdel{these light curves}\DIFdelend \DIFaddbegin \DIFadd{them}\DIFaddend , which together remain a strong baseline. Previous work has trained
+encoders on light curves and judged them by their own downstream scores, but has not asked what
+they add to the engineered features. We pre-train a convolutional encoder on unlabelled TESS light curves to predict each
+window's latent representation from those of its neighbours. We then freeze it, add its features to
+the 25 engineered features, and read the combination out with one fixed linear probe on ten tasks\DIFdelbegin \DIFdel{spanning variability , asteroseismology and rotation }\DIFdelend \DIFaddbegin \DIFadd{:
+five variability classes, four asteroseismic targets and rotation period}\DIFaddend . Adding the learned features
+improves the readout on 7 of 10 tasks over the engineered features alone, while an untrained encoder
+does not. The combination also outperforms two networks trained end-to-end on the same labelled
+stars on most tasks. An encoder trained without labels therefore gives astronomers new features
+that complement the ones they already use rather than replace them.
+\end{abstract}
+
+\section{Introduction}
+
+A star's light curve carries its pulsation, rotation, eclipses and oscillations, and with them its
+age, interior and companions. Wide-field \DIFdelbegin \DIFdel{photometric }\DIFdelend surveys now produce light curves far faster
+than they can be labelled. TESS
+\citep{ricker2015} \DIFdelbegin \DIFdel{trades sampling rate against sky coverage: }\DIFdelend \DIFaddbegin \DIFadd{returns }\DIFaddend 2-minute \DIFdelbegin \DIFdel{(}\DIFdelend or 20-second \DIFdelbegin \DIFdel{) }\DIFdelend \DIFaddbegin \DIFadd{\mbox{%DIFAUXCMD
+\citep{huber2022} }\hskip0pt%DIFAUXCMD
+}\DIFaddend light curves for hundreds of
+thousands of pre-selected stars, and full-frame images \DIFdelbegin \DIFdel{, every 30 or 10 minutes, for
+every }\DIFdelend \DIFaddbegin \DIFadd{of every }\DIFaddend star in the field \DIFdelbegin \DIFdel{\mbox{%DIFAUXCMD
+\citep{huber2022}}\hskip0pt%DIFAUXCMD
+}\DIFdelend \DIFaddbegin \DIFadd{at cadences that
+change between mission cycles (30 minutes, then 10, now 200 seconds)}\DIFaddend . LSST \citep{ivezic2019}
+will \DIFdelbegin \DIFdel{widen the gap}\DIFdelend \DIFaddbegin \DIFadd{add }\emph{\DIFadd{billions}} \DIFadd{more light curves, albeit at a cadence of days}\DIFaddend . Self-supervised learning is the
+natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
+each \DIFdelbegin \DIFdel{downstream }\DIFdelend task. Encoders of this shape exist for ground-based, Gaia and Kepler light curves
+\citep{donoso2025astromer2,zuo2025falco,rui2026jepa} and are evaluated by classification accuracy,
+sometimes against engineered features \citep{rui2026jepa}; a label-free TESS representation
+\citep{poznanski2026} is evaluated by whether repeat observations of one star lie close in its embedding space.
+None measures what they add to engineered features.
+
+
+\clearpage
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}

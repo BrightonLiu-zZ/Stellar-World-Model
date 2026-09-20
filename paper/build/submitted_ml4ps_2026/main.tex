@@ -1,0 +1,448 @@
+\documentclass{article}
+
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}   % \lesssim in Appendix A; amsmath alone does not define it
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{float}     % [H] for the Appendix C figure, so it stays with its paragraph
+\setlength{\abovecaptionskip}{4pt}   % float spacing tightened to hold the body on four pages
+\setlength{\textfloatsep}{10pt}
+\setlength{\floatsep}{8pt}
+
+% The workshop prescribes the first-page footer text. The style file is otherwise untouched.
+\makeatletter
+\renewcommand{\@noticestring}{%
+  Submitted to the 9th Workshop on Machine Learning and the Physical Sciences (ML4PS 2026).
+  Do not distribute.%
+}
+\makeatother
+
+\title{What does self-supervision add to engineered features\\for stellar light curves?}
+
+\author{Anonymous Author(s)\\Affiliation\\Address\\\texttt{email}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+TESS light curves encode a star's pulsation, rotation, binarity and oscillations, among other physical
+properties, but the survey
+produces far more light curves than can be labelled by hand. Astronomers have engineered a few
+dozen physically motivated features from them, which together remain a strong baseline. Previous work has trained
+encoders on light curves and judged them by their own downstream scores, but has not asked what
+they add to the engineered features. We pre-train a convolutional encoder on unlabelled TESS light curves to predict each
+window's latent representation from those of its neighbours. We then freeze it, add its features to
+the 25 engineered features, and read the combination out with one fixed linear probe on ten tasks:
+five variability classes, four asteroseismic targets and rotation period. Adding the learned features
+improves the readout on 7 of 10 tasks over the engineered features alone, while an untrained encoder
+does not. The combination also outperforms two networks trained end-to-end on the same labelled
+stars on most tasks. An encoder trained without labels therefore gives astronomers new features
+that complement the ones they already use rather than replace them.
+\end{abstract}
+
+\section{Introduction}
+
+A star's light curve carries its pulsation, rotation, eclipses and oscillations, and with them its
+age, interior and companions. Wide-field surveys now produce light curves far faster
+than they can be labelled. TESS
+\citep{ricker2015} returns 2-minute or 20-second \citep{huber2022} light curves for hundreds of
+thousands of pre-selected stars, and full-frame images of every star in the field at cadences that
+change between mission cycles (30 minutes, then 10, now 200 seconds). LSST \citep{ivezic2019}
+will add \emph{billions} more light curves, albeit at a cadence of days. Self-supervised learning is the
+natural response: pre-train one encoder on the unlabelled archive, then attach a cheap readout for
+each task. Encoders of this shape exist for ground-based, Gaia and Kepler light curves
+\citep{donoso2025astromer2,zuo2025falco,rui2026jepa} and are evaluated by classification accuracy,
+sometimes against engineered features \citep{rui2026jepa}; a label-free TESS representation
+\citep{poznanski2026} is evaluated by whether repeat observations of one star lie close in its embedding space.
+None measures what they add to engineered features.
+
+In this domain, the baseline that a learned encoder must improve on is already strong. Decades of variable-star
+research have distilled light curves into compact engineered summaries: periodogram peak structure,
+band-limited power, spectral entropy and robust scatter statistics. Pipelines built on them remain
+highly competitive. The benchmark of \citet{li2025staremb} makes the point
+sharply: across seven expert-labelled variable-star classes, no time-series foundation model they
+tested strictly surpassed the long-established domain feature baseline on classification. A learned
+encoder for this data therefore has to answer one question: do its features add predictive signal to
+the engineered features under the same readout?
+
+We measure that directly. We pre-train an encoder on TESS light curves, freeze it, and add its
+features to the 25 engineered features under one fixed linear readout. We ask two things: what the
+learned features add, and whether the combination, which trains only a linear model on the labels,
+outperforms two networks trained end-to-end on the same labels. Our contributions are:
+
+\begin{itemize}
+\item \textbf{The learned features add to the engineered features rather than replacing them.}
+Adding the learned features to the engineered ones improves a fixed linear readout beyond
+$2\,\mathrm{SE}$ on 7 of 10 tasks; an untrained encoder gives no such gain, so the gain comes from pre-training,
+not from merely adding 128 columns.
+\item \textbf{The combined pipeline, read out by a fixed linear model, outperforms the two
+supervised networks we train end-to-end on the same labels on most tasks.} Against a supervised Conv1D with the
+encoder's architecture it is ahead on 6
+of 10 tasks and indistinguishable on the other 4; against an MLP on raw flux it is ahead on 9 of 10.
+\end{itemize}
+
+\section{Data and method}
+
+\paragraph{Data.} We use 2-minute SPOC PDCSAP light curves of stars brighter than TESS magnitude
+$T = 10$ from Sectors 27--101. Pre-training and five of the ten probes (pulsating, eclipsing binary,
+rotation, transit and rotation period) use a label-enriched subset of 13{,}470 stars, split 70/15/15
+by star: every star labelled as a transit host, eclipsing binary or pulsator that has a usable
+window, plus a random sample of 10{,}000 quiet stars, listed in none of our variability catalogues. The pre-training
+loss never sees a label, but this pool is label-enriched, not a random draw from the survey. The other five probes draw their labels from catalogues that barely overlap this subset and are scored on a second pool of 22{,}860 stars built the same way (every catalogue positive
+with a usable window plus 10{,}000 quiet stars, split 70/15/15). No test star of the first pool
+enters pre-training. About 8\% of the second pool's test stars (265 of 3{,}429) were in the pre-training subset; removing them leaves all seven gains in place
+(Appendix~\ref{app:unseen}). Each light curve is split into contiguous segments wherever the time axis
+breaks, at a missing cadence or a jump longer than five median cadences; segments are
+median-normalised by their median absolute deviation and sliced into non-overlapping windows of 256
+cadences ($256 \times 120$\,s $\approx 8.5$\,h); restricting to one cadence keeps every window the
+same span of time. Windows containing a missing value are discarded, never interpolated or padded,
+and segments are never stitched across sector or gap boundaries. Pre-training consumes
+sequences of exactly 16 consecutive windows ($\approx 5.69$\,d), cut at a random offset within a
+segment, and uses no labels.
+
+\paragraph{Encoder.} A 1D convolutional variational encoder \citep{kingma2014} maps each window to a
+128-dimensional Gaussian posterior, and a GRU \citep{cho2014} predicts the next window's latent from
+its predecessors, run both forward and backward over the sequence. The objective is
+\begin{align*}
+\mathcal{L} = {} & \|\hat{x}-x\|^{2} + \beta\,\mathrm{KL}
++ \lambda\big[\|\hat{z}_{t+1}-\bar{z}_{t+1}\|^{2} + \|\hat{z}_{t-1}-\bar{z}_{t-1}\|^{2}\big] \\
+& + w\big[\|\log P_{H}(\hat{x})-\log P_{H}(x)\|^{2} + \|\Delta\hat{x}-\Delta x\|^{2}\big],
+\end{align*}
+where every term is a mean squared error, $\bar{z}$ the stop-gradient target of the forward and
+backward predictors, $P_{H}$ the Hann-tapered power spectrum, $\Delta$ the first difference, and
+$(\beta,\lambda,w) = (0.1, 60, 0.3)$, $\beta$ warmed up linearly over ten epochs. The encoder is trained with six seeds and then frozen; no gradient from any label reaches
+it.
+
+\paragraph{Representations and readout.} A star's learned features are $\mu$, the mean, over every
+window of its first segment (16 for 95\% of stars, 20 for the rest), of the per-window posterior
+means. The engineered baseline is a fixed 25-feature vector modelled on the T'DA variability pipeline
+\citep{audenaert2021}, computed on the same first segment, 19 from its periodogram and 6 time-domain statistics; Appendix~\ref{app:features} defines each feature. Readouts are fixed in advance and never
+tuned on a task, with inputs standardised using training-split statistics alone: class-balanced $L_{2}$ logistic regression
+at $C = 1$ for the detection tasks, ridge for the two regressions with its penalty set by leave-one-out
+cross-validation. We compare four
+arms, each the same readout on a different feature set: \texttt{features}, $\mu$,
+\texttt{features}\,$\oplus\,\mu$, and, as a control, the same fusion built on an \emph{untrained}
+encoder; the two supervised baselines below are the fifth and sixth arms.
+Appendix~\ref{app:readout} repeats the first three under XGBoost.
+
+\paragraph{Supervised baselines.} Two end-to-end baselines see exactly the same input windows, star
+sets and splits. \textbf{C1} reuses the encoder's convolutional trunk unchanged, adds a 128-unit linear layer
+and a scalar output, and is trained per task with a class-weighted loss on a star-level score, the mean of the star's window
+logits computed inside the network so that the gradient flows through the mean. \textbf{C2} replaces the convolutional trunk with a
+dense one and changes nothing else, so C1 versus C2 isolates the convolutional inductive bias. Both
+use one pre-registered regularisation setting for all tasks, select on a validation split no probe
+has ever touched, and are trained with six seeds.
+
+\paragraph{Tasks and metrics.} We score ten tasks with one probe per physical quantity: pulsating
+variables \citep{gao2025}, eclipsing binaries \citep{prsa2022}, rotation and rotation period
+\citep{boyle2026}, transits \citep{guerrero2021}, flare activity \citep{seli2025,vida2021},
+oscillating red giants and their $\nu_{\max}$ \citep{hon2021}, solar-like oscillators
+\citep{hatt2023}, and RGB versus helium-burning discrimination \citep{sreenivas2026}. Here
+$\nu_{\max}$ is the frequency of maximum oscillation power. Detection tasks are scored by the area
+under the precision--recall curve (PR-AUC), whose floor is the positive-class prevalence rather than
+$0.5$; prevalence is therefore quoted with every detection score. The two regressions are scored by
+$R^{2}$.
+
+\paragraph{Uncertainties.} All error bars are $2\times$ the standard error of the mean over seeds.
+For the $\mu$ arms the seeds are independent pre-training runs (six); for C1 and C2 they are
+initialisation and shuffling seeds (six); the engineered arm is
+deterministic. The seeds of the $\mu$ arms and of the supervised arms are unrelated, so differences
+between them are treated as unpaired and their bands combined as $\sqrt{\mathrm{SE}_a^{2}+\mathrm{SE}_b^{2}}$.
+A difference counts only when it exceeds the combined $2\,\mathrm{SE}$ band. These bands
+measure re-training spread only; a paired bootstrap over the test stars (1{,}000 resamples, seeds
+averaged; Appendix~\ref{app:bootstrap}) checks that no verdict hinges on the particular test stars.
+
+\section{Results}
+
+\begin{table}[t]
+\caption{Ten-task scorecard. Frozen arms: a fixed logistic or ridge readout, or XGBoost on the same
+inputs (Appendix~\ref{app:readout}). Bold: best point estimate of the three arms under each frozen
+readout. $n$: test stars; prev.: positive-class prevalence.}
+\label{tab:scorecard}
+\centering
+\scriptsize
+\input{tables/table1_scorecard}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig1_deltas_xgb.pdf}
+\caption{The two claims. \textbf{(a)} What the learned features add to the engineered features, under
+the fixed linear readout of Table~\ref{tab:scorecard} (solid) and under an XGBoost readout on the
+same inputs (faded; Appendix~\ref{app:readout}). \textbf{(b)} The fusion probe against the two
+supervised baselines. Bars are $2\,\mathrm{SE}$.}
+\label{fig:deltas}
+\end{figure}
+
+\paragraph{The learned features add to the engineered features.} Table~\ref{tab:scorecard} and
+Figure~\ref{fig:deltas}a give the comparison. Adding $\mu$ to the 25 features improves the
+fixed readout beyond $2\,\mathrm{SE}$ on 7 of 10 tasks, led by solar-like oscillators $+0.071$,
+pulsating $+0.057$ and flare activity $+0.051$, and reaching $+0.013$ ($R^{2}$) on rotation period.
+Rotation is positive but just short of the
+bar ($+0.016$ against $0.016$). The two negative tasks are the ones where 128 extra columns cost more
+than they add: the 25 features already cover the task (oscillating giants, $-0.003$ on a baseline
+of $0.920$) or the training set is too small to fit 128 more weights (RGB versus helium-burning, $-0.050$ on
+755 training stars). On both, an untrained encoder loses by about the same amount as the trained
+fusion, within the error band; that is what redundant columns do to a linear fit, not a sign that
+$\mu$ carries misleading content (Appendix~\ref{app:negatives}). Across all ten tasks the untrained control is
+negative on seven and never exceeds $+0.016$ (Table~\ref{tab:readout}), so the gains are not what any 128 extra columns would
+buy on this feature set; they are specific to what pre-training learned. $\mu$ on its own does not
+replace the features (ahead on only 4 of 10 tasks alone), as \citet{li2025staremb} also find for
+time-series foundation models; we therefore report fusion rather than substitution \citep{makinen2024}.
+
+\paragraph{The fusion probe outperforms the two supervised networks on most tasks.} Against C1, which shares
+the convolutional trunk, labels and input windows but is trained end-to-end, the fusion
+probe is ahead on 6 of 10 tasks and indistinguishable from it on the other 4
+(Figure~\ref{fig:deltas}b). Against
+C2, an MLP on raw flux, it is ahead on 9 of 10 and behind on one (RGB versus helium-burning, 161
+stars). C1 is not weak: it is ahead of the engineered arm on 5 of 10.
+A paired star-bootstrap (Appendix~\ref{app:bootstrap}) excludes zero on 5 of the 7 fusion gains, 5
+of the 6 leads over C1 and 7 of the 9 over C2.
+This holds for this architecture on 669 to 16{,}002 labelled stars per task, not for
+supervision in general.
+
+\paragraph{The GRU prediction term raises the gain on every task.} Removing the
+GRU prediction term, all else fixed and the same six
+seeds, reduces the fusion gain on all 10 tasks, and by more than $2\,\mathrm{SE}$ on 6 when the two
+arms are differenced seed by seed (Table~\ref{tab:readout}). Without it the gain falls by more
+than half on 5 of the 8 tasks where fusion gains.
+
+\section{Discussion}
+
+\paragraph{Pick the encoder by a held-out probe, not by its loss.} Across the ten pre-training recipes of
+one sweep, a lower validation reconstruction loss went with a \emph{lower} probe score: the Spearman
+$\rho$ between negated loss and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks. The recipe with the
+lowest loss is the one without the prediction term on all four, and choosing it would cost
+$0.021$--$0.049$ PR-AUC (Appendix~\ref{app:valloss}). An encoder here therefore has to be
+chosen by a held-out probe, not by its own loss.
+
+\paragraph{\textbf{Limitations and next steps.}} \emph{Readout.} The four linear-readout arms (\texttt{features},
+$\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
+parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
+is between feature sets. Our claim is confined to these 25 features and a linear readout: under
+XGBoost on the same inputs the gain exceeds $2\,\mathrm{SE}$ on 4 of 10 tasks and is negative on one
+(Appendix~\ref{app:readout}). \emph{Data.} Every arm,
+the supervised baselines included, sees one 5.7-day segment of a bright 2-minute star. The fainter,
+far more numerous stars in the full-frame images, and light curves spanning several sectors, are the
+obvious next experiments. \emph{Labels.} Our
+negatives are stars absent from the label catalogues, not stars verified to lack the signal, so
+catalogue incompleteness adds positive-unlabelled label noise and the detection scores may be
+conservative. The flare label marks stars that have flared somewhere in their TESS data, not a flare inside
+the 5.7-day segment we encode, so the task is recognising a flaring star, not finding a flare. \emph{Label scarcity.} When
+the readout is trained on a few percent of the labels, the advantage narrows on 7 of 10 tasks, so how
+much pre-training helps when labels are scarce remains open. \emph{Discovery.} Every task here has a
+catalogue; whether $\mu$ also separates kinds of variability that no catalogue labels yet, for instance
+as clusters in the latent space, is untested.
+
+\paragraph{Reproducibility and disclosure.} \S2 and Appendix~\ref{app:features} give the data,
+objective, features and readouts; the encoder has four convolutional stages (widths $32/64/128/256$,
+kernel 5, each halving length), a 128-d latent and a one-layer GRU of width 256. Code and score
+tables will be released on publication; generative AI assisted with analysis code and prose editing.
+
+\raggedbottom
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+
+\section{The two tasks where fusion does not help}
+\label{app:negatives}
+
+\begin{center}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+task & features & fusion $\Delta$ & $2\,\mathrm{SE}$ & untrained $\Delta$ & $n_{\mathrm{test}}$ \\
+\midrule
+oscillating giants & 0.920 & $-0.003$ & 0.002 & $-0.003$ & 3{,}429 \\
+RGB vs.\ He-burning & 0.758 & $-0.050$ & 0.019 & $-0.038$ & 161 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Oscillating giants: the 25 features already cover the task.} The labels of
+\citet{hon2021} come from a convolutional classifier reading a $128 \times 128$ image of each star's
+power spectrum, which fires on a visible oscillation power excess at
+$6 \lesssim \nu_{\max} \lesssim 250\,\mu$Hz. Our engineered vector encodes close to that same
+quantity: eight log-spaced band powers spanning 0.3--360\,c/d, plus the spectral centroid and
+entropy, locate the excess and describe its concentration. The features accordingly reach $0.920$,
+and the trained and untrained fusion arms then lose the same $0.003$: 128 collinear columns
+diluting a linear fit, with no trained-versus-untrained difference left to attribute to $\mu$.
+
+\paragraph{RGB versus helium-burning: no arm resolves the discriminant.} \citet{sreenivas2026} assign
+the evolutionary state with a convolutional classifier reading the background-corrected power spectrum
+\emph{folded at} $\Delta\nu$; the physics underneath is the dipole mixed-mode period spacing
+$\Delta\Pi_{1}$ \citep{bedding2011}. Neither is accessible at our baseline. The encoder sees one
+256-cadence window at a time, so the finest frequency structure available to $\mu$ is
+$\Delta f = 32.6\,\mu$Hz, while $\Delta\nu$ for these stars is $\approx 1.5$--$18\,\mu$Hz; the comb
+itself is unresolved, let alone a fold of it. The engineered features, computed on the whole 5.69\,d
+segment, reach $2.0\,\mu$Hz, still coarser than the mixed-mode spacing
+$\Delta\Pi_{1}\nu^{2} \approx 0.2$--$0.6\,\mu$Hz near $\nu_{\max} = 50\,\mu$Hz. No arm on this row
+measures the quantity the label encodes; the $0.758$ the features reach rides on correlates of
+evolutionary state rather than on its discriminant. The row behaves accordingly: it is the only one
+where C2 ($0.762$) is ahead of the fusion probe while C1 reaches only $0.530$ on 755 training stars,
+and it carries the smallest test set in the study.
+
+\section{The gain under a nonlinear readout}
+\label{app:readout}
+
+\begin{table}[H]
+\caption{What 128 added columns change, relative to the 25 features alone, under each frozen readout
+(mean over six encoder seeds; absolute scores are in Table~\ref{tab:scorecard}). $+\mu$: our encoder.
+No prediction term: the same recipe trained without the GRU prediction term. Untrained: a randomly
+initialised encoder, which is a single encoder and carries no band. Bold: beyond $2\,\mathrm{SE}$. The
+last row counts tasks won, tied and lost at that bar.}
+\label{tab:readout}
+\centering
+\scriptsize
+\input{tables/table_readout}
+\end{table}
+
+The XGBoost readout takes the same inputs as the linear one. For each task and seed it is selected
+over a grid of maximum depth $\{3,5\}$ and learning rate $\{0.05,0.1\}$, with up to 1{,}000 rounds
+and early stopping after 50 rounds without improvement on a held-out 25\% of the training stars;
+the test stars play no part in the selection. Under XGBoost the features-only arm also varies with
+the seed, through the validation split, so the gain is differenced seed by seed.
+
+Under XGBoost the $\mu$ gain (features\,$\oplus\,\mu$ minus features alone) is smaller than under the
+linear readout on most tasks. XGBoost also scores higher than the linear readout on the 25 features
+alone on eight of ten tasks, and the two changes go together. On solar-like oscillators the features-only score rises from
+0.320 to 0.470 and the $\mu$ gain falls from $+0.071$ to $-0.007$. On RGB versus helium-burning,
+where XGBoost does not raise the features-only score, the $\mu$ gain is larger under XGBoost. Across
+the ten tasks, the rise in the features-only score and the fall in the $\mu$ gain have a Spearman rank
+correlation of 0.92. This is consistent with part of the information $\mu$ supplies to a linear
+readout being already present in the 25 features, in a form only a nonlinear readout can use.
+
+Table~\ref{tab:readout} also gives the same comparison with an untrained encoder in place of the
+trained one. Under XGBoost its 128 columns lower the score on nine of ten tasks and the trained $\mu$
+scores above it on eight, so the gains that survive come from pre-training, not from adding columns.
+XGBoost on the 25 features alone also scores above the linear fusion probe on 7 of 10 tasks
+(Table~\ref{tab:scorecard}). The body's claim is about what $\mu$ adds under a fixed linear readout,
+not that the linear fusion probe is the strongest classifier available on these features.
+
+\section{Validation reconstruction against downstream score}
+\label{app:valloss}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/figB_valloss.pdf}
+\caption{One point per pre-training recipe (mean over its seeds), one panel per task. (a) The
+exp05 sweep: ten recipes sharing corpus, architecture and loss terms, differing only in the
+GRU prediction term (off, forward, forward+backward, multi-step, the last three at three weights),
+four seeds each. (b) The family our encoder belongs to: 19 recipes on the final encoder that
+vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
+auxiliary term, the cross is the one dynamics-off recipe, the star is the recipe we use. $x$: best
+post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed linear probe on $\mu$;
+$\rho$: Spearman's rank correlation between negated loss and score.}
+\label{fig:valloss}
+\end{figure}
+
+Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph of \S4. In row (a)
+the loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
+next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
+probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
+from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than our encoder (they carry an
+earlier spectral auxiliary term), so row (b) repeats the estimator on the family we ship: 19 recipes
+built on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each
+(two more recipes in which one seed collapsed are excluded; we never drop a seed). There the
+anti-correlation does not persist as such: $\rho$ is $-0.51$ on pulsating and $-0.50$ on transit,
+$+0.37$ on eclipsing binaries and $+0.11$ on rotation. What persists is that the loss is not a
+selector: its optimum is again the recipe with the weakest competing term (the diamond, no auxiliary
+term at all), which is never the probe optimum, and trusting it costs $0.011$--$0.034$ PR-AUC. So
+row (a) shows an anti-correlation on every task; in row (b) it survives on two tasks and reverses on
+two; in neither does the loss choose. Both are statements across recipes only: within one recipe, across its seeds, no label-free
+curve metric we tried (reconstruction, reconstruction plus auxiliary, active latent units) ranks the
+seeds, every such correlation sitting within $\pm 0.3$ of zero.
+
+\section{Paired bootstrap over test stars}
+\label{app:bootstrap}
+
+The $2\,\mathrm{SE}$ bands in the body come from re-training and say nothing about whether the
+particular test stars favoured one arm. For every printed contrast we therefore resample each task's
+test set with replacement 1{,}000 times, rescore every arm on the identical resampled list from its
+saved per-star predictions (no model is retrained), average each arm over its seeds, and take the
+difference. Table~\ref{tab:bootstrap} gives the 95\% percentile interval of that difference and the
+share of resamples in which the fusion arm is ahead; intervals that exclude zero are bold. The check
+tightens no verdict and reverses none: every row the body calls ahead has the fusion arm ahead in at
+least 65\% of resamples. It does loosen the smallest tasks -- rotation period (150 test stars) and
+RGB versus helium-burning (161) account for four of the ten rows where a resolved $2\,\mathrm{SE}$
+verdict becomes an interval that touches zero.
+
+\begin{table}[H]
+\caption{Paired star-bootstrap of the four contrasts the body counts. Each entry is the 95\% interval
+of (left arm $-$ right arm) over 1{,}000 resamples of the test stars, seeds averaged, and the share of
+resamples with the difference above zero ($f_{>0}$; 1.00 means the left arm is ahead in every
+resample, 0.00 that it is behind in every resample). Bold: interval excludes zero.}
+\label{tab:bootstrap}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\input{tables/tableC_bootstrap.tex}
+\end{table}
+
+\section{The 25 engineered features}
+\label{app:features}
+
+All 25 features are computed from a star's first segment: its windows concatenated into one flux
+series $x$ of 4{,}096 or 5{,}120 cadences, already median-normalised by its median absolute
+deviation. The periodogram is the power spectrum of the mean-subtracted series,
+$P(f) = |\mathrm{FFT}(x - \bar{x})|^{2}$ with the zero-frequency bin dropped, and
+$p(f) = P(f)/\sum_f P(f)$ its normalisation to unit sum. Frequencies are in cycles per day.
+$f_{1}, f_{2}, f_{3}$ are the three strongest local maxima of $P$, strongest first.
+
+\begin{table}[H]
+\caption{The engineered feature vector, modelled on the T'DA variability pipeline \citep{audenaert2021}.}
+\label{tab:features}
+\centering
+\small
+\begin{tabular}{llp{0.56\linewidth}}
+\toprule
+\# & feature & definition \\
+\midrule
+1--3 & $\log_{10} f_{1}, \log_{10} f_{2}, \log_{10} f_{3}$ & frequencies of the three strongest periodogram peaks \\
+4--6 & $p_{1}, p_{2}, p_{3}$ & normalised power at each peak, $p_{k} = P(f_{k})/\sum_f P(f)$ \\
+7--8 & $p_{2}/p_{1}$, $p_{3}/p_{1}$ & peak-power ratios \\
+9 & harmonic ratio & $P(2f_{1})/P(f_{1})$ at the bin nearest $2f_{1}$; $0$ if $2f_{1}$ exceeds the Nyquist frequency \\
+10--17 & band powers & $\log_{10} \sum_{f \in B_{j}} p(f)$ for eight log-spaced bands $B_{j}$ spanning 0.3--360\,c/d \\
+18 & spectral entropy & $-\sum_f p(f)\ln p(f) / \ln N$, $N$ the number of frequency bins \\
+19 & spectral centroid & $\log_{10} \sum_f f\,p(f)$ \\
+20--21 & skew, kurtosis & sample skewness and excess kurtosis of $x$ \\
+22 & point-to-point scatter ratio & $\mathrm{std}(\Delta x)/\mathrm{std}(x)$, $\Delta$ the first difference \\
+23 & depth & 95th minus 5th percentile of $x$ \\
+24 & MAD & median absolute deviation of $x$ \\
+25 & IQR & inter-quartile range of $x$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Evaluation restricted to stars never seen in pre-training}
+\label{app:unseen}
+
+The encoder is fitted on the training stars of the first pool and monitored on its validation stars,
+so the test stars of
+the five tasks scored on that pool are unseen by construction. The second pool shares some stars with
+it. Table~\ref{tab:unseen} removes every test star that was in the pre-training training or validation
+split and rescores the saved per-star predictions; no model is refitted. The gain exceeds
+$2\,\mathrm{SE}$ on the same 7 of 10 tasks; the largest change is flare activity, $+0.051$ to
+$+0.041$, and the small loss on oscillating giants ($-0.003$) becomes a tie ($-0.001$).
+
+\begin{table}[H]
+\caption{The fusion gain (features\,$\oplus\,\mu$ minus features, linear readout) on all test stars and
+on the test stars never seen in pre-training. Bold: beyond $2\,\mathrm{SE}$ over six encoder seeds.}
+\label{tab:unseen}
+\centering
+\scriptsize
+\input{tables/table_unseen}
+\end{table}
+
+\end{document}

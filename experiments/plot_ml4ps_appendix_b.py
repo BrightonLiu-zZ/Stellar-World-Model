@@ -158,47 +158,90 @@ def main() -> int:
     table09.merge(stats09, on="task").to_csv(out_dir / "build" / "figB_exp09_data.csv", index=False)
     kept09 = table09[~table09["void"]]
 
-    # Upper row: the exp05 comb sweep (dynamics-term axis). Lower row: the shipped hann0p3 family
+    # Row (a): the exp05 comb sweep (dynamics-term axis). Row (b): the shipped hann0p3 family
     # (auxiliary-term axis). Same x and y definitions; each row keeps its own axis ranges.
+    #
+    # Three files come out of the same two drawing functions, because the arXiv layout splits them:
+    # row (a) is the body's evidence for the model-selection paragraph, row (b) is the appendix's
+    # caveat on the family we actually ship, and the combined figure is kept so the pre-split
+    # version stays reproducible. Drawing them from one function is what keeps the three consistent.
+    def draw_row_a(axes_row) -> None:
+        for ax, task in zip(axes_row, TASKS):
+            t = table[table["task"] == task]
+            for _, r in t.iterrows():
+                ax.scatter(r["val_recon_min"], r["pr_auc"], marker=MARKER[r["mode"]], s=16,
+                           color="tab:red" if r["mode"] == "off" else "tab:blue", linewidths=0.5, zorder=3)
+            s = stats[stats["task"] == task].iloc[0]
+            ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_all_ten']:.2f}$", pad=3)
+
+    def draw_row_b(axes_row) -> None:
+        for ax, task in zip(axes_row, TASKS):
+            t = kept09[kept09["task"] == task]
+            for _, r in t.iterrows():
+                if r["cell"] == "exp09_aux_none":
+                    style = dict(marker="D", color="tab:red", s=12)
+                elif r["cell"].endswith("_off"):
+                    style = dict(marker="X", color="tab:red")
+                elif r["cell"] == "exp07_hann0p3_fbwd":
+                    style = dict(marker="*", color="tab:blue", s=30)
+                else:
+                    style = dict(marker="o", color="tab:blue")
+                ax.scatter(r["val_recon_min"], r["pr_auc"], s=style.pop("s", 16), linewidths=0.5,
+                           zorder=3, **style)
+            s = stats09[stats09["task"] == task].iloc[0]
+            ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_kept']:+.2f}$", pad=3)
+
+    def tidy(axes_array) -> None:
+        for ax in np.atleast_1d(axes_array).ravel():
+            ax.tick_params(length=2, pad=1.5)
+            ax.locator_params(axis="both", nbins=4)
+
+    handles_a = [plt.Line2D([], [], marker=MARKER[m], color="tab:red" if m == "off" else "tab:blue",
+                            linestyle="", markersize=4, label=MODE_LABEL[m]) for m in MARKER]
+    handles_b = [plt.Line2D([], [], marker="D", color="tab:red", linestyle="", markersize=3.5,
+                            label="no auxiliary term"),
+                 plt.Line2D([], [], marker="*", color="tab:blue", linestyle="", markersize=5,
+                            label="shipped recipe"),
+                 plt.Line2D([], [], marker="o", color="tab:blue", linestyle="", markersize=4,
+                            label="other recipes"),
+                 plt.Line2D([], [], marker="X", color="tab:red", linestyle="", markersize=4,
+                            label="dynamics off")]
+    xlabel = "best validation reconstruction loss (mean over seeds)"
+
     fig, axes = plt.subplots(2, 4, figsize=(5.5, 2.75))
-    for ax, task in zip(axes[0], TASKS):
-        t = table[table["task"] == task]
-        for _, r in t.iterrows():
-            ax.scatter(r["val_recon_min"], r["pr_auc"], marker=MARKER[r["mode"]], s=16,
-                       color="tab:red" if r["mode"] == "off" else "tab:blue", linewidths=0.5, zorder=3)
-        s = stats[stats["task"] == task].iloc[0]
-        ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_all_ten']:.2f}$", pad=3)
-    for ax, task in zip(axes[1], TASKS):
-        t = kept09[kept09["task"] == task]
-        for _, r in t.iterrows():
-            if r["cell"] == "exp09_aux_none":
-                style = dict(marker="D", color="tab:red", s=12)
-            elif r["cell"].endswith("_off"):
-                style = dict(marker="X", color="tab:red")
-            elif r["cell"] == "exp07_hann0p3_fbwd":
-                style = dict(marker="*", color="tab:blue", s=30)
-            else:
-                style = dict(marker="o", color="tab:blue")
-            ax.scatter(r["val_recon_min"], r["pr_auc"], s=style.pop("s", 16), linewidths=0.5, zorder=3, **style)
-        s = stats09[stats09["task"] == task].iloc[0]
-        ax.set_title(f"{TASK_LABEL[task]}: $\\rho={s['rho_kept']:+.2f}$", pad=3)
-    for ax in axes.ravel():
-        ax.tick_params(length=2, pad=1.5)
-        ax.locator_params(axis="both", nbins=4)
+    draw_row_a(axes[0])
+    draw_row_b(axes[1])
+    tidy(axes)
     axes[0][0].set_ylabel("PR-AUC on $\\mu$\n(a) exp05 sweep")
     axes[1][0].set_ylabel("PR-AUC on $\\mu$\n(b) shipped family")
-    fig.supxlabel("best validation reconstruction loss (mean over seeds)", y=0.01)
-    handles = [plt.Line2D([], [], marker=MARKER[m], color="tab:red" if m == "off" else "tab:blue",
-                          linestyle="", markersize=4, label=MODE_LABEL[m] if m == "off" else f"(a) {MODE_LABEL[m]}")
-               for m in MARKER]
-    handles += [plt.Line2D([], [], marker="D", color="tab:red", linestyle="", markersize=3.5, label="(b) no auxiliary term"),
-                plt.Line2D([], [], marker="*", color="tab:blue", linestyle="", markersize=5, label="(b) shipped recipe"),
-                plt.Line2D([], [], marker="o", color="tab:blue", linestyle="", markersize=4, label="(b) other recipes")]
-    fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.12),
+    fig.supxlabel(xlabel, y=0.01)
+    combined = [plt.Line2D([], [], marker=h.get_marker(), color=h.get_color(), linestyle="",
+                           markersize=h.get_markersize(),
+                           label=h.get_label() if h.get_label() == "dynamics off" else f"(a) {h.get_label()}")
+                for h in handles_a]
+    combined += [plt.Line2D([], [], marker=h.get_marker(), color=h.get_color(), linestyle="",
+                            markersize=h.get_markersize(), label=f"(b) {h.get_label()}")
+                 for h in handles_b[:3]]
+    fig.legend(handles=combined, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.12),
                handletextpad=0.3, columnspacing=1.0)
     fig.tight_layout(w_pad=0.6, h_pad=0.8)
     fig.savefig(out_dir / "figures" / "figB_valloss.pdf", bbox_inches="tight")
     fig.savefig(out_dir / "build" / "figB_valloss.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+    for suffix, draw, handles, ylabel in [("a", draw_row_a, handles_a, "PR-AUC on $\\mu$"),
+                                          ("b", draw_row_b, handles_b, "PR-AUC on $\\mu$")]:
+        fig, axes = plt.subplots(1, 4, figsize=(5.5, 1.55))
+        draw(axes)
+        tidy(axes)
+        axes[0].set_ylabel(ylabel)
+        fig.supxlabel(xlabel, y=0.02)
+        fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False,
+                   bbox_to_anchor=(0.5, -0.19), handletextpad=0.3, columnspacing=1.0)
+        fig.tight_layout(w_pad=0.6)
+        fig.savefig(out_dir / "figures" / f"figB_valloss_{suffix}.pdf", bbox_inches="tight")
+        fig.savefig(out_dir / "build" / f"figB_valloss_{suffix}.png", dpi=200, bbox_inches="tight")
+        plt.close(fig)
 
     with pd.option_context("display.width", 200, "display.float_format", "{:.3f}".format):
         print("exp05 comb family (the figure):")

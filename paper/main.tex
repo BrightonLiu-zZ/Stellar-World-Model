@@ -225,17 +225,38 @@ than half on 5 of the 8 tasks where fusion gains.
 
 \paragraph{Pick the encoder by a held-out probe, not by its loss.} Across the ten pre-training recipes of
 one sweep, a lower validation reconstruction loss went with a \emph{lower} probe score: the Spearman
-$\rho$ between negated loss and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks. The recipe with the
+$\rho$ between negated loss and PR-AUC runs from $-0.58$ to $-0.84$ over four tasks
+(Figure~\ref{fig:valloss_a}). The recipe with the
 lowest loss is the one without the prediction term on all four, and choosing it would cost
-$0.021$--$0.049$ PR-AUC (Appendix~\ref{app:valloss}). An encoder here therefore has to be
+$0.021$--$0.049$ PR-AUC. On the family our encoder belongs to the anti-correlation does not survive as
+such --- it holds on two of the four tasks and reverses on two --- but the loss optimum is still never
+the probe optimum (Appendix~\ref{app:valloss}). The same objective carries a second cost: it develops
+a localised artifact inside each window, and none of the interventions we tried on four axes cleared
+both pre-registered acceptance criteria, so the recipe we ship does so by the stated fallback rule
+rather than by winning (Appendix~\ref{app:artifact}). An encoder here therefore has to be
 chosen by a held-out probe, not by its own loss.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{figures/figB_valloss_a.pdf}
+\caption{Validation reconstruction loss against downstream probe score, one point per pre-training
+recipe and one panel per task. The ten recipes share corpus, architecture and loss terms and differ
+only in the GRU prediction term (off, forward, forward+backward, multi-step, the last three at three
+weights), four seeds each. $x$: best post-warm-up validation reconstruction loss, averaged over the
+recipe's seeds; $y$: PR-AUC of the fixed linear probe on $\mu$; $\rho$: Spearman's rank correlation
+between negated loss and score. The loss-optimal recipe is the dynamics-free one (red) on all four
+tasks, and it is the worst or next-to-worst probe on each. Appendix~\ref{app:valloss} repeats the
+measurement on the family this paper's encoder belongs to.}
+\label{fig:valloss_a}
+\end{figure}
 
 \paragraph{\textbf{Limitations and next steps.}} \emph{Readout.} The four linear-readout arms (\texttt{features},
 $\mu$, \texttt{features}\,$\oplus\,\mu$, and the untrained control) share one linear model. It has few
 parameters, so it cannot rescue weak features, and it is identical across the four, so the comparison
 is between feature sets. Our claim is confined to these 25 features and a linear readout: under
-XGBoost on the same inputs the gain exceeds $2\,\mathrm{SE}$ on 4 of 10 tasks and is negative on one
-(Appendix~\ref{app:readout}). \emph{Data.} Every arm,
+XGBoost on the same inputs the gain exceeds $2\,\mathrm{SE}$ on 4 of 10 tasks and is negative on one;
+where the nonlinear readout raises the features-only score, the $\mu$ gain falls, with a rank
+correlation of $0.92$ across the ten tasks (Appendix~\ref{app:readout}). \emph{Data.} Every arm,
 the supervised baselines included, sees one 5.7-day segment of a bright 2-minute star. The fainter,
 far more numerous stars in the full-frame images, and light curves spanning several sectors, are the
 obvious next experiments. \emph{Labels.} Our
@@ -246,7 +267,9 @@ the 5.7-day segment we encode, so the task is recognising a flaring star, not fi
 the readout is trained on a few percent of the labels, the advantage narrows on 7 of 10 tasks, so how
 much pre-training helps when labels are scarce remains open. \emph{Discovery.} Every task here has a
 catalogue; whether $\mu$ also separates kinds of variability that no catalogue labels yet, for instance
-as clusters in the latent space, is untested.
+as clusters in the latent space, is untested. We leave it as an exploratory direction rather than a
+result: with no labels there is nothing to score such a separation against, so it needs a design of
+its own.
 
 \paragraph{Reproducibility and disclosure.} \S2 and Appendix~\ref{app:features} give the data,
 objective, features and readouts; the encoder has four convolutional stages (widths $32/64/128/256$,
@@ -452,36 +475,114 @@ not that the linear fusion probe is the strongest classifier available on these 
 
 \section{Validation reconstruction against downstream score}
 \label{app:valloss}
+
+Figure~\ref{fig:valloss_a} in \S4 is half of this measurement; Figure~\ref{fig:valloss_b} is the
+other half, and the two differ in which family of recipes is varied.
+
+In Figure~\ref{fig:valloss_a} the loss-optimal recipe is the dynamics-free one on all four tasks, and
+it is the worst or next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$
+PR-AUC against the probe-optimal recipe. The trend is not carried by that one point: with it removed,
+$\rho$ still runs from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than our encoder --
+they carry an earlier spectral auxiliary term -- so Figure~\ref{fig:valloss_b} repeats the estimator
+on the family we ship: 19 recipes built on the final encoder that vary the form, weight and floor of
+the auxiliary term, six seeds each (two more recipes in which one seed collapsed are excluded; we
+never drop a seed).
+
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{figures/figB_valloss.pdf}
-\caption{One point per pre-training recipe (mean over its seeds), one panel per task. (a) The
-exp05 sweep: ten recipes sharing corpus, architecture and loss terms, differing only in the
-GRU prediction term (off, forward, forward+backward, multi-step, the last three at three weights),
-four seeds each. (b) The family our encoder belongs to: 19 recipes on the final encoder that
-vary the form, weight and floor of the spectral auxiliary term, six seeds each; the diamond has no
-auxiliary term, the cross is the one dynamics-off recipe, the star is the recipe we use. $x$: best
-post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed linear probe on $\mu$;
-$\rho$: Spearman's rank correlation between negated loss and score.}
-\label{fig:valloss}
+\includegraphics[width=\linewidth]{figures/figB_valloss_b.pdf}
+\caption{The same estimator as Figure~\ref{fig:valloss_a}, on the family our encoder belongs to: 19
+recipes on the final encoder that vary the form, weight and floor of the spectral auxiliary term, six
+seeds each. The diamond has no auxiliary term, the cross is the one dynamics-off recipe, the star is
+the recipe we use. $x$: best post-warm-up validation reconstruction loss; $y$: PR-AUC of the fixed
+linear probe on $\mu$; $\rho$: Spearman's rank correlation between negated loss and score.}
+\label{fig:valloss_b}
 \end{figure}
 
-Figure~\ref{fig:valloss} is the measurement behind the model-selection paragraph of \S4. In row (a)
-the loss-optimal recipe is the dynamics-free one (red cross) on all four tasks, and it is the worst or
-next-to-worst probe on each, so selecting on the loss costs $0.021$--$0.049$ PR-AUC against the
-probe-optimal recipe. The trend is not carried by that one point: with it removed, $\rho$ still runs
-from $-0.43$ to $-0.87$. Those recipes are an earlier sweep than our encoder (they carry an
-earlier spectral auxiliary term), so row (b) repeats the estimator on the family we ship: 19 recipes
-built on the final encoder that vary the form, weight and floor of the auxiliary term, six seeds each
-(two more recipes in which one seed collapsed are excluded; we never drop a seed). There the
-anti-correlation does not persist as such: $\rho$ is $-0.51$ on pulsating and $-0.50$ on transit,
-$+0.37$ on eclipsing binaries and $+0.11$ on rotation. What persists is that the loss is not a
-selector: its optimum is again the recipe with the weakest competing term (the diamond, no auxiliary
-term at all), which is never the probe optimum, and trusting it costs $0.011$--$0.034$ PR-AUC. So
-row (a) shows an anti-correlation on every task; in row (b) it survives on two tasks and reverses on
-two; in neither does the loss choose. Both are statements across recipes only: within one recipe, across its seeds, no label-free
-curve metric we tried (reconstruction, reconstruction plus auxiliary, active latent units) ranks the
-seeds, every such correlation sitting within $\pm 0.3$ of zero.
+There the anti-correlation does not persist as such: $\rho$ is $-0.51$ on pulsating and $-0.50$ on
+transit, $+0.37$ on eclipsing binaries and $+0.11$ on rotation. What persists is that the loss is not
+a selector: its optimum is again the recipe with the weakest competing term (the diamond, no
+auxiliary term at all), which is never the probe optimum, and trusting it costs $0.011$--$0.034$
+PR-AUC. So the body's figure shows an anti-correlation on every task; this one shows it surviving on
+two tasks and reversing on two; in neither does the loss choose. Both are statements across recipes
+only: within one recipe, across its seeds, no label-free curve metric we tried (reconstruction,
+reconstruction plus auxiliary, active latent units) ranks the seeds, every such correlation sitting
+within $\pm 0.3$ of zero.
+
+\section{The within-window artifact, and the two gates that governed it}
+\label{app:artifact}
+
+\paragraph{Why the objective carries a tapered power spectrum.} A point-wise reconstruction error
+prices a light curve by amplitude, and in these data amplitude sits mostly in the slow component, so
+a decoder can score well on it while discarding the periodic structure the tasks depend on. The two
+auxiliary terms put the pressure back where the point-wise term does not reach: the first difference
+in time, and the log power spectrum across frequency. The spectrum is taken on a Hann-tapered window
+rather than on the raw one, for the reason the rest of this appendix gives.
+
+\paragraph{What the decoder found instead.} Every term in the objective is computed inside a single
+256-cadence window; nothing spans a boundary. A narrow impulse raises log-power at every frequency at
+once, so a decoder can lower the log-spectrum error by planting one spike rather than by reproducing
+the star's spectrum. Where the cheapest spike sits is decided by the taper, a fixed function of
+position within the window: with a rectangular window it is the window edge, and under a Hann taper
+it is the window centre, where the taper weight is largest. Figure~\ref{fig:recon} shows both, in
+flux and in the position-resolved error. Laid end to end, the spikes form one train with a period of
+exactly one window, which is a property of the display and not of the objective.
+
+Measured as the per-position reconstruction error divided by its own interior median (positions
+16--240), maximised over position within each seed and then averaged over six seeds, the rectangular
+recipe reaches $31.7\times$ at the window edge and the tapered recipe $11.8\times$ near the centre.
+The taper moved the defect and shrank it; it did not remove it. An earlier claim that it had was
+based on a measurement taken only at the edge, and is withdrawn.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{figures/figD_recon.pdf}
+\caption{The artifact, in two stars and in the average. \textbf{Top two rows:} three consecutive
+256-cadence windows of one pulsator and one quiet star, input flux in grey against each recipe's
+reconstruction; dotted lines mark the window boundaries, and both rows of a column share one
+$y$-scale. The two recipes differ only in the taper used for the auxiliary spectral term. Neither
+decoder reproduces the cadence-scale scatter, which a 128-dimensional bottleneck cannot carry; what
+differs is where each one puts a spike it does not need. \textbf{Bottom:} reconstruction error by
+position within the window, divided by that seed's median over positions 16--240. Thin lines are the
+six pre-training seeds, thick lines their mean. The dashed line is the pre-registered artifact gate.
+The seed mean understates the tapered recipe's peak because its position moves between seeds
+(125--143), which is why the gate is read as a maximum within each seed.}
+\label{fig:recon}
+\end{figure}
+
+\paragraph{The two pre-registered acceptance criteria.} Both were registered on 2026-08-15, before
+any of the interventions below were written.
+
+\emph{Artifact gate.} The within-window impulse ratio -- the quantity plotted in the lower panel of
+Figure~\ref{fig:recon} -- taken as the maximum over \emph{all} positions rather than at the edge
+alone, at most $1.5\times$ at full auxiliary weight, over six seeds, \emph{and} a visual sign-off on
+a fresh random sample of reconstructed light curves. The number never passes on its own: reading an
+edge-only number is how the withdrawn claim above was made in the first place.
+
+\emph{No-regression gate.} No task among eclipsing binaries, pulsators, rotation and transits worse
+than the incumbent recipe by more than $2\,\mathrm{SE}$, at both readouts, paired over six seeds. It
+is the guard against a clean but useless encoder: a recipe that abolishes the impulse and loses the
+probe is not a fix.
+
+\paragraph{What we tried, and why the tapered recipe is the one we ship.} We varied the auxiliary
+term along four axes: its \emph{mechanism} (remove it entirely; average the spectrum over a family of
+Slepian tapers so that no single position is cheapest; add a penalty on the excess kurtosis of the
+residual; both together; put a floor under the spectral sub-term), its \emph{amount} (six weights of
+the best mechanism, from $0.0125$ to $0.20$), the \emph{level} of that floor (rebuilt as a two-sided
+hinge, which unlike a clamp keeps a restoring gradient, at three measured values), and finally a
+\emph{floor on the KL term}, which was the remaining untried lever. No cell cleared both gates. The
+ones that removed the impulse lost the probe; the ones that kept the probe kept a measurable impulse.
+The nearest miss reached $1.55 \pm 0.05$, which is $2.4\,\mathrm{SE}$ above the gate; its repaired
+variant reached $1.47$ over six seeds and $1.55$ over twelve, and regressed on pulsators at both
+readouts.
+
+Because no candidate passed, the rule fixed before the ladder ran leaves the incumbent in place. The
+encoder this paper uses is therefore the Hann-tapered recipe by a pre-registered fallback, not
+because it won a comparison. Two things make that defensible rather than merely procedural. The
+artifact was separately measured not to cost the downstream probe -- ablating it moved $\nu_{\max}$
+by $+0.0001 \pm 0.0037$ -- and closing the channel, which was also a test of whether the validation
+loss becomes a usable selector once it can no longer be lowered by the trick, did not make it one
+(Appendix~\ref{app:valloss}).
 
 \section{Paired bootstrap over test stars}
 \label{app:bootstrap}

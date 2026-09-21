@@ -259,6 +259,99 @@ tables will be released on publication; generative AI assisted with analysis cod
 
 \appendix
 
+\section{Pre-training and readout details}
+\label{app:training}
+
+\paragraph{What one pre-training example is.} The packed pre-training corpus is the 70\% training
+split of the first pool: 9{,}428 stars, 35{,}854 segments and 582{,}352 windows of 256 cadences. The
+encoder is monitored on the pool's 15\% validation split (2{,}021 stars, 121{,}328 windows), which no
+probe ever sees. One example is one segment. Each epoch it yields a fresh run of 16 consecutive
+windows beginning at a uniformly random offset inside that segment, so a long segment shows a
+different 5.69-day stretch every epoch; a segment with fewer than 16 windows never entered the pack.
+Validation uses offset 0 and every segment, so the monitored quantity does not move with the
+sampling. A batch is 256 sequences, giving 140 optimiser steps per epoch.
+
+\paragraph{The first-difference term.} In the objective of \S2, $\Delta x_{t} = x_{t+1} - x_{t}$ is
+the first difference along a window, and $\|\Delta\hat{x}-\Delta x\|^{2}$ is the mean squared error
+between the reconstruction's cadence-to-cadence changes and the input's. It is there because the
+point-wise term $\|\hat{x}-x\|^{2}$ is already small for a smooth curve drawn through a noisy one:
+the fastest components of a light curve carry little amplitude, so a decoder that low-passes its
+input pays almost nothing for discarding them. Differencing is a high-pass operation, so the same
+error re-enters the objective weighted towards high frequency and the smoothed reconstruction is
+penalised. $P_{H}$ plays the same role in the frequency domain; the two share the weight $w$ and are
+summed with equal weight inside it.
+
+\paragraph{Optimisation.} Adam at learning rate $3\times10^{-4}$, cosine-annealed to
+$3\times10^{-6}$ over the 100-epoch cap, gradient-norm clipping at $1.0$, mixed precision. $\beta$
+rises linearly from $0$ to its target $0.1$ over the first ten epochs and stays there; the shipped
+recipe uses no free-bits floor. Training stops early once ten consecutive epochs improve no tracked
+checkpoint, a counter that is armed only after the warm-up.
+
+\paragraph{Which checkpoint is frozen.} Only post-warm-up epochs are eligible. During the warm-up
+$\beta$ and the KL term are still moving, and the scheduled-$\beta$ total is minimised at $\beta=0$,
+that is by an untrained model, so an unrestricted argmin can select the warm-up transient rather than
+a fit. Among the eligible epochs we freeze the one minimising
+$\mathrm{recon} + w\cdot\mathrm{aux}$ on the validation split. The prediction term is deliberately
+absent from that metric: it is the quantity a dynamics ablation changes, so including it would select
+each arm of that comparison by a different rule.
+
+\paragraph{Readouts.} Logistic regression is scikit-learn's \texttt{LogisticRegression} with $L_{2}$
+penalty, $C=1$, \texttt{class\_weight="balanced"} and at most 2{,}000 iterations. Ridge is
+\texttt{RidgeCV} over ten log-spaced penalties from $10^{-2}$ to $10^{3}$, chosen by leave-one-out
+cross-validation. Every input column is z-scored with the training split's own mean and standard
+deviation, and the same two numbers are applied unchanged to validation and test. For the fusion arm
+the 25 features and the 128 latent means are column-concatenated first and the 153-column matrix is
+standardised as a whole, so no arm gets a different scaling of the columns it shares with another.
+
+\paragraph{The supervised baselines.} C1 and C2 are trained with AdamW at learning rate
+$3\times10^{-4}$ and weight decay $10^{-4}$, dropout $0.2$ before the task head only (the trunk is
+unregularised, as the encoder's is), gradient clipping at $1.0$, mixed precision, batches of 64
+stars ($\approx 1{,}040$ windows, since the loss is per star), at most 60 epochs and patience 10.
+The positive class enters the loss with weight $n_{\mathrm{neg}}/n_{\mathrm{pos}}$ computed on the
+training split. One regularisation setting is fixed in advance for all ten tasks and no per-task
+tuning is done. Each run is selected on the best validation score in that task's own headline metric
+rather than on validation loss: at the prevalences here the validation-loss minimum and the
+validation-metric maximum routinely fall many epochs apart, and selecting on the loss would depress
+the baseline we are trying to beat.
+
+\section{The two star pools, and what a quiet star is}
+\label{app:pools}
+
+Each task is scored on the pool its catalogue populates, and every arm on a task sees the identical
+star list, so the two definitions below fix the population but never a comparison.
+
+\paragraph{The first pool (13{,}470 stars).} Every star in the corpus with at least one usable window
+that carries a transit, eclipsing-binary or pulsating label: 3{,}470 stars, assigned to a single
+split stratum rarest class first (813 transit, 1{,}226 eclipsing binary, 1{,}431 pulsating). To them
+are added 10{,}000 \emph{quiet} stars drawn uniformly at random, without replacement, from the corpus
+stars that appear in none of our five v1 catalogues -- transit, eclipsing binary, pulsating, rotation
+and flare. The whole pool is split 70/15/15 by star within each stratum, and the encoder is
+pre-trained and monitored on this pool's training and validation splits.
+
+Note what the two clauses do differently. A star becomes a positive member only through the three
+detection catalogues; rotation and flare appear only as exclusions on the quiet draw. A rotator that
+is not also a transit host, eclipsing binary or pulsator is therefore neither admitted as a positive
+nor drawn as a quiet star, and is absent from this pool altogether.
+
+\paragraph{The second pool (22{,}860 stars).} The four external catalogues behind the asteroseismic
+and rotation-period tasks are joined to the corpus into one table of 11{,}007 stars, each row a star
+that at least one of them covers. Those 11{,}007, plus the 1{,}853 flare-labelled corpus stars not
+already among them, are the pool's members (12{,}860). To them are added a fresh draw of 10{,}000
+quiet stars: corpus stars that carry no transit, eclipsing-binary, pulsating or rotation label, have
+no flare label, and are absent from the external table. The split is again 70/15/15 by star, with the
+stratum taken rarest first over RGB-versus-helium-burning, Kounkel rotation period, flare, solar-like
+oscillator, oscillating giant and quiet.
+
+\paragraph{The two screens are not symmetric.} The first pool's quiet draw is screened against the
+five v1 catalogues only; it never consults the four external ones, so some of its quiet stars are
+oscillating red giants or solar-like oscillators. The second pool's quiet draw is screened against
+both sets. Nothing printed here compares a star in one pool with a star in the other, so the
+asymmetry costs no verdict; what it does mean is that a negative in either pool is a star
+\emph{absent from the relevant catalogues}, not a star examined and found to lack the signal. The
+external table is itself a union of four detection lists, so a star it covers with a zero for
+oscillating giants is a star Hatt, Sreenivas or Kounkel listed and \citet{hon2021} did not, which is
+the same kind of negative. This is the label limitation \S4 states, given exactly.
+
 \section{The two tasks where fusion does not help}
 \label{app:negatives}
 
@@ -297,13 +390,29 @@ evolutionary state rather than on its discriminant. The row behaves accordingly:
 where C2 ($0.762$) is ahead of the fusion probe while C1 reaches only $0.530$ on 755 training stars,
 and it carries the smallest test set in the study.
 
+\paragraph{Why 128 redundant columns cost a linear fit.} A linear readout spends its training stars
+estimating one coefficient per column, and each estimate carries its own error into the prediction
+whether or not the column carries signal. On the RGB-versus-helium-burning row the features arm fits
+25 coefficients on 755 training stars and the fusion arm 153, so the stars-per-coefficient ratio
+falls from about 30 to about 5 while, by the resolution argument above, the added columns supply
+nothing the label depends on. The variance a column adds scales with how few stars are available to
+pin it down; the signal it adds does not. A column is therefore worth its place only when what it
+adds exceeds that cost, and on this row and on oscillating giants it does not. The logistic readout's
+$L_{2}$ penalty is fixed at $C = 1$ for every task rather than tuned per task, so it damps this effect
+but does not remove it. The prediction that follows is the one the table above shows: an untrained
+encoder's 128 columns should cost about the same as a trained one's, since the argument never
+mentions what the columns contain, and they do ($-0.038$ against $-0.050$, and $-0.003$ against
+$-0.003$).
+
 \section{The gain under a nonlinear readout}
 \label{app:readout}
 
 \begin{table}[H]
 \caption{What 128 added columns change, relative to the 25 features alone, under each frozen readout
 (mean over six encoder seeds; absolute scores are in Table~\ref{tab:scorecard}). $+\mu$: our encoder.
-No prediction term: the same recipe trained without the GRU prediction term. Untrained: a randomly
+No prediction term: the same recipe trained without the GRU prediction term. Retained: the share of
+the full $\mu$ gain that survives that removal, printed only where the full gain is a gain, and
+negative where the gain changes sign rather than shrinking. Untrained: a randomly
 initialised encoder, which is a single encoder and carries no band. Bold: beyond $2\,\mathrm{SE}$. The
 last row counts tasks won, tied and lost at that bar.}
 \label{tab:readout}
@@ -311,6 +420,13 @@ last row counts tasks won, tied and lost at that bar.}
 \scriptsize
 \input{tables/table_readout}
 \end{table}
+
+The retained column is the per-task form of the body's ablation count. On the eight tasks where
+fusion gains, removing the GRU prediction term leaves between $-0.69$ and $0.89$ of that gain, below
+half on five of them, and on two (rotation and rotation period) the remainder is negative, so the
+ablated encoder's columns are worse than not adding them at all. We give the eight fractions rather
+than one summary number because the ten gains are measured in PR-AUC, ROC-AUC and $R^{2}$ and cannot
+be added together.
 
 The XGBoost readout takes the same inputs as the linear one. For each task and seed it is selected
 over a grid of maximum depth $\{3,5\}$ and learning rate $\{0.05,0.1\}$, with up to 1{,}000 rounds
@@ -427,6 +543,43 @@ $f_{1}, f_{2}, f_{3}$ are the three strongest local maxima of $P$, strongest fir
 \bottomrule
 \end{tabular}
 \end{table}
+
+\paragraph{What ``modelled on T'DA'' means.} \citet{audenaert2021} classify Kepler Q9 light curves
+into eight variability classes with an ensemble of four supervised learners and a random-forest
+metaclassifier. We take none of that: not the classifiers, not the classes, not the training set.
+What we borrow is the shape of the feature vector its tree-based members read, and the borrowing is
+partial in ways a reader should be able to check.
+
+\emph{Kept.} A short list of periodogram peaks with their relative strengths, a harmonic
+measure of the dominant peak, an entropy measure of the signal, and robust time-domain scatter
+statistics -- skewness, kurtosis and the median absolute deviation, all three of which appear in
+their Table~1. Our point-to-point scatter ratio $\mathrm{std}(\Delta x)/\mathrm{std}(x)$ is, up to a
+square root, their variability index $\eta_{e}$, the ratio of the mean squared successive difference
+to the variance.
+
+\emph{Changed.} They extract up to six frequencies with up to ten harmonics each by iterative
+prewhitening -- fit a frequency and its harmonics, subtract them, repeat until a significance
+criterion stops the loop. We take the three strongest local maxima of one segment's periodogram, with
+no prewhitening and no significance test, and keep one harmonic ratio $P(2f_{1})/P(f_{1})$ instead of
+a harmonic series. Their amplitudes and phases become, here, powers normalised by the total and
+ratios between them: the flux is median-absolute-deviation normalised per segment, so an absolute
+amplitude is not a quantity we have, and we drop phases and phase differences entirely. Their
+FliPer, the mean power above each of four frequency cut-offs, becomes our eight log-spaced band
+powers spanning 0.3--360\,c/d plus a spectral centroid. Their entropy features are computed on the
+time series (differential entropy, multiscale sample entropy); ours is the Shannon entropy of the
+normalised power spectrum. Because a packed segment is uniformly sampled and gap-free, its
+Lomb--Scargle periodogram is the FFT periodogram, so we compute the cheaper one.
+
+\emph{Dropped.} Everything that needs a phase fold at a reliably determined period -- the
+self-organising-map location, the folded point-to-point statistics and the folded range -- because
+5.69 days covers few cycles for the longer-period classes in our menagerie. Also dropped: the
+coherency parameter, zero crossings, the range of the cumulative sum, the Shapiro--Wilk statistic,
+the variance ratio, the significant-harmonic count and the flux ratio, and the power-spectrum image
+their deep-learning member reads, which is not a feature vector at all.
+
+The result is 25 numbers, 19 from the periodogram and 6 from the time domain, and it is a baseline
+rather than a reproduction: it is deliberately the cheap, linear-readable part of a pipeline whose
+published accuracy came from an ensemble we do not run.
 
 \section{Evaluation restricted to stars never seen in pre-training}
 \label{app:unseen}

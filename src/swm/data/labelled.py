@@ -48,6 +48,9 @@ repo_root = Path(__file__).resolve().parents[3]
 SPLITS = ("train", "val", "test")
 V1_PACKED = repo_root / "experiments" / "exp01_window256_seq16" / "packed"
 POOL_PARQUET = repo_root / "processed" / "subset" / "new_task_pool.parquet"
+# pool 3 (swm.eval.rotation_pool): the corpus stars outside pool 1, replayed exactly as pool 2 is
+ROTATION_POOL_PARQUET = repo_root / "processed" / "subset" / "rotation_pool.parquet"
+REPLAYED_POOLS = {"pool": POOL_PARQUET, "rotation_pool": ROTATION_POOL_PARQUET}
 SEQ_DIR = repo_root / "processed" / "sequences"
 IJSPEERT_CSV = repo_root / "labels" / "external" / "ijspeert2024_bright.csv"
 CANON_CSV = repo_root / "labels" / "variability_labels_star.csv"
@@ -106,13 +109,13 @@ def _build_v1(split: str, window: int) -> StarBags:
     return StarBags(np.array(tics, dtype=np.int64), np.concatenate(blocks, axis=0), counts)
 
 
-def _build_pool(split: str, window: int) -> StarBags:
+def _build_pool(split: str, window: int, pool_parquet: Path = POOL_PARQUET) -> StarBags:
     """Pool blocks replayed from the sequences npz, dropping stars whose guard leaves no windows.
 
     The drop is not a policy choice here: new_task_extract.load_pool_blocks drops them too, so keeping
     them would put stars in the supervised population that the probe never scored.
     """
-    pool = pd.read_parquet(POOL_PARQUET)
+    pool = pd.read_parquet(pool_parquet)
     want = pool.loc[pool["split"] == split, "tic_id"].astype(int).sort_values().tolist()
     npz_index = index_pool_npz(SEQ_DIR, set(want))
     tics = []
@@ -145,10 +148,10 @@ def load_bags(population: str, split: str, window: int, cache_dir: Path) -> Star
         return StarBags(payload["tics"], payload["windows"], payload["counts"])
     if population == "v1":
         bags = _build_v1(split, window)
-    elif population == "pool":
-        bags = _build_pool(split, window)
+    elif population in REPLAYED_POOLS:
+        bags = _build_pool(split, window, REPLAYED_POOLS[population])
     else:
-        raise ValueError(f"unknown population {population!r}; expected 'v1' or 'pool'")
+        raise ValueError(f"unknown population {population!r}; expected 'v1' or one of {sorted(REPLAYED_POOLS)}")
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(cache_path, tics=bags.tics, windows=bags.windows, counts=bags.counts)
     log.info(f"cached {population}/{split}: {len(bags)} stars, {len(bags.windows)} windows --> {cache_path}")

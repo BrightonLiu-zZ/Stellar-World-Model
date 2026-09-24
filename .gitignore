@@ -49,3 +49,8 @@ experiments/c1c2_supervised/runs/
 /paper/*.fdb_latexmk
 /paper/*.fls
 /paper/*.synctex.gz
+
+# Per-run training artifacts (any depth, deliberate)
+best.pt
+result.json
+DONE.txt

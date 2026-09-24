@@ -1,4 +1,4 @@
-# Stellar-World-Model
+# stellar-ssl
 
 Self-supervised latent dynamics world model on TESS stellar light curves.
 

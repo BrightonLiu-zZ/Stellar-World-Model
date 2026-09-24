@@ -63,6 +63,7 @@ def render(manifest: dict, manifest_path: Path) -> str:
     pilot = pilot_runs(manifest)
     root = manifest["paths"]["root"]
     budget = manifest["budget"]
+    runner = Path(manifest["paths"]["runner"]).name  # a second manifest (pool 3) names its own runner
     lines = [
         BANNER.format(manifest=manifest_path.as_posix()),
         f"# {manifest['name']} - TRAINING, run in your own terminal (GPU + W&B online).",
@@ -73,9 +74,9 @@ def render(manifest: dict, manifest_path: Path) -> str:
         "# Arm-major, task-priority order so a -MaxHours cutoff leaves the LEADING cells complete.",
         "# INTERRUPT/RESUME: Ctrl-C anytime; DONE.txt markers skip finished runs on the next invocation.",
         "# Usage:  cd C:\\git_repo\\Stellar-World-Model",
-        "#         .\\experiments\\run_c1c2_supervised_baselines.ps1 -PilotOnly   # 11 runs, then STOP for the gate",
-        "#         .\\experiments\\run_c1c2_supervised_baselines.ps1              # the full queue",
-        "#         .\\experiments\\run_c1c2_supervised_baselines.ps1 -DryRun",
+        f"#         .\\experiments\\{runner} -PilotOnly   # {len(pilot)} runs, then STOP for the gate",
+        f"#         .\\experiments\\{runner}              # the full queue",
+        f"#         .\\experiments\\{runner} -DryRun",
         "",
         "param(",
         "  [switch]$DryRun,",
